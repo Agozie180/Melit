@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 import { WEEKLY_CAP_CENTS } from "../money";
 import { KITE_TESTNET } from "../kite/config";
+import { prepareKpassRuntime } from "../kite/kpass-runtime";
 import { execKpass, isSandboxStatus, type KpassRunner } from "../payments/kpass-rail";
 import { kpassEnabled } from "../payments";
 import { agentTestnetAddress } from "../payments/testnet-rail";
@@ -26,6 +27,14 @@ export interface AgentIdentity {
   enforcedBy: string;
   explorerUrl: string | null;
   checkedAt: number;
+  /** Present when kpass confirms an approved Passport spending session. */
+  passportSession?: {
+    sessionId: string;
+    label: string;
+    maxTotalUsd: string | null;
+    spentUsd: string | null;
+    remainingUsd: string | null;
+  };
 }
 
 function base(): Pick<AgentIdentity, "displayName" | "spendingLimitCents" | "limitWindow" | "enforcedBy" | "checkedAt"> {
@@ -46,6 +55,20 @@ function pickString(obj: unknown, keys: string[]): string | undefined {
   return undefined;
 }
 
+async function passportSessionSummary(run: KpassRunner): Promise<AgentIdentity["passportSession"] | undefined> {
+  const sessionId = process.env.KPASS_SESSION_ID;
+  if (!sessionId) return undefined;
+  const args = ["session", "status", "--session-id", sessionId];
+  const res = await run(args);
+  if (res.exitCode !== 0 || res.json?.status !== "success") return undefined;
+  const data = (res.json?.data ?? res.json) as Record<string, unknown>;
+  const maxTotal = pickString(data, ["max_total_usd", "maxTotalUsd", "max_total", "budget_usd"]);
+  const spent = pickString(data, ["spent_usd", "spentUsd", "spent_total_usd"]);
+  const remaining = pickString(data, ["remaining_usd", "remainingUsd", "remaining_total_usd"]);
+  const label = pickString(data, ["label", "name", "title"]) ?? "Melit weekly budget";
+  return { sessionId, label, maxTotalUsd: maxTotal ?? null, spentUsd: spent ?? null, remainingUsd: remaining ?? null };
+}
+
 async function passportIdentity(run: KpassRunner): Promise<AgentIdentity | null> {
   const mode = await run(["sandbox", "status"]);
   if (mode.exitCode !== 0 || !isSandboxStatus(mode.json)) return null;
@@ -53,14 +76,18 @@ async function passportIdentity(run: KpassRunner): Promise<AgentIdentity | null>
   if (status.exitCode !== 0 || status.json?.status !== "success") return null;
   const agentId = pickString(status.json, ["agent_id", "agentId", "did", "id", "address"]);
   if (!agentId) return null;
+  const passportSession = await passportSessionSummary(run).catch(() => undefined);
   return {
     ...base(),
     agentId,
     provider: "Kite Passport (sandbox)",
     verified: true,
     status: "kite-passport-sandbox",
-    statusLabel: "Kite Passport sandbox agent, confirmed by kpass",
+    statusLabel: passportSession
+      ? `Kite Passport sandbox · session “${passportSession.label}”`
+      : "Kite Passport sandbox agent, confirmed by kpass",
     explorerUrl: null,
+    passportSession,
   };
 }
 
@@ -71,6 +98,7 @@ export async function getAgentIdentity(run: KpassRunner = execKpass): Promise<Ag
   let value: AgentIdentity | null = null;
 
   if (kpassEnabled()) {
+    prepareKpassRuntime();
     value = await passportIdentity(run).catch(() => null);
   }
   if (!value) {

@@ -167,6 +167,7 @@ export default function Dashboard() {
           <BudgetGauge spentCents={spentCents} capCents={capCents} />
           <VaultCard savedCents={savedCents} purchases={ledger.length} />
           <ShoppingListCard
+            key={shoppingList?.sig ?? "unsigned"}
             signed={shoppingList}
             ledger={ledger}
             catalog={info?.catalog ?? []}

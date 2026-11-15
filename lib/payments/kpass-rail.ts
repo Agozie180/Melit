@@ -6,9 +6,7 @@
 // reachable (SELLER_BASE_URL), not localhost.
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { prepareKpassRuntime, resolveKpassBinary } from "../kite/kpass-runtime";
 import { explorerTxUrl, KITE_TESTNET } from "../kite/config";
 import { signOrder } from "./order-token";
 import { RailError, type PaymentOrder, type PaymentRail, type PaymentReceipt } from "./types";
@@ -24,13 +22,12 @@ export type KpassRunner = (args: string[]) => Promise<KpassResult>;
 const EXECUTE_TIMEOUT_MS = 330_000;
 
 export function kpassBinary(): string {
-  if (process.env.KPASS_BIN) return process.env.KPASS_BIN;
-  const local = join(homedir(), ".local", "bin", "kpass");
-  return existsSync(local) ? local : "kpass";
+  return resolveKpassBinary();
 }
 
 export const execKpass: KpassRunner = (args) =>
   new Promise((resolve) => {
+    prepareKpassRuntime();
     execFile(
       kpassBinary(),
       [...args, ...(process.env.KPASS_BASE_URL ? ["--base-url", process.env.KPASS_BASE_URL] : []), "--output", "json", "--no-interactive"],

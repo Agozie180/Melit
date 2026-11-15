@@ -16,7 +16,7 @@ import type { PaymentRail } from "./types";
 export type PaymentMode = "testnet" | "recorded" | "simulated";
 
 export function kpassEnabled(): boolean {
-  return process.env.MELIT_KPASS === "1";
+  return process.env.MELIT_KPASS === "1" || Boolean(process.env.KPASS_RUNTIME_BUNDLE_B64);
 }
 
 export function directTestnetEnabled(): boolean {

@@ -9,7 +9,7 @@ import { markError, markLearned, markPolled, markSubmitted, nextAction, verdicts
 import type { ReppoVerdict } from "../learning/types";
 import { backfillReppoJobs, dealsStore, learnFromReppo, reppoJobsStore } from "./learning";
 
-const TICK_MS = 2_000;
+const TICK_MS = 1_500;
 const LEARN_RETRY_MS = 30_000;
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {

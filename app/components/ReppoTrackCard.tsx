@@ -52,7 +52,8 @@ export function ReppoTrackCard({
         Reppo evaluations
       </CardTitle>
       <p className="mb-3 text-xs text-neutral-600">
-        Every purchase is judged asynchronously by Reppo&apos;s evaluator panel. Purchases never wait on this queue.
+        Every purchase is judged asynchronously by Reppo&apos;s evaluator panel. Purchases never wait on this queue. Keep this tab open until jobs reach verdict and
+        learned — the queue runs in the browser, not on the server.
       </p>
       <div className="mb-3 flex flex-wrap gap-2">
         {(["queued", "pending", "verdict", "failed"] as const).map((s) => (
@@ -78,7 +79,15 @@ export function ReppoTrackCard({
                   {(job.state === "queued" || job.state === "pending") && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
                   {jobLabel(job)}
                 </Badge>
+                {job.state === "verdict" && job.verdict?.reason && (
+                  <span className="w-full text-xs text-neutral-600" title={job.verdict.reason}>
+                    {job.verdict.reason.length > 120 ? `${job.verdict.reason.slice(0, 117)}…` : job.verdict.reason}
+                  </span>
+                )}
                 {job.state === "verdict" && job.verdict?.confidence && <span className="text-xs text-neutral-500">{job.verdict.confidence}</span>}
+                {(job.state === "failed" || job.state === "pending") && job.attempts > 0 && (
+                  <span className="text-xs text-neutral-500">attempt {job.attempts}</span>
+                )}
                 {job.learned && <Badge tone="green">learned</Badge>}
                 {job.error && job.state !== "verdict" && <span className="w-full text-xs text-red-700">{job.error}</span>}
                 {job.evalId && <span className="w-full font-mono text-[10px] text-neutral-400">eval {job.evalId}</span>}

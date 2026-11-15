@@ -5,7 +5,8 @@ import { ndjsonResponse } from "@/lib/server/stream";
 import { parseProfile } from "@/lib/learning/profile";
 import { checkRateLimit, withRemaining } from "@/lib/server/rate-limit";
 
-export const maxDuration = 120;
+/** Passport session execute can take several minutes on x402 settle. */
+export const maxDuration = 300;
 
 const BodySchema = z.object({
   request: z.object({
