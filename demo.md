@@ -8,7 +8,7 @@ Use https://melit.vercel.app/ (or a deploy of this branch). That URL includes th
 
 - Fresh browser. Empty ledger. Do not pre-save a list.
 - If the banner says the API key is missing, every round will be **Fallback heuristic**. Say that in act 3.
-- If the agent card says **Testnet wallet, not Passport-verified**, that is the truth of the public deploy. `kpass` does not run on Vercel.
+- Check `/api/agent` or the payments line on the agent card. **`passport.runtimeReady: true`** means Rail 1 may run on Vercel. The card can still say **Testnet wallet, not Passport-verified** until live `kpass agent status` confirms; do not promise a Passport checkmark unless the card shows it.
 - If payments read **simulated, no money moves**, no chain transaction will appear.
 
 ## Act 1 — The refusal (0:00–0:20)

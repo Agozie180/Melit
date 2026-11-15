@@ -14,7 +14,7 @@ Melit is a shopping agent that **negotiates first** and **pays only if server co
 
 Two **independent** checks run before any payment rail: (1) a **signed shopping list**—what it may buy, max price, quantity; (2) a **$300 rolling 7-day Spend Guard** on the signed ledger. Tampering with names, prices, or signatures fails closed. Off-list seller pushes are declined until the owner approves and saves.
 
-**Simulated / honest limits:** sellers are mocks in `lib/market/catalog.ts`; savings vault 85/15 is **list price minus paid price**, not money collected. Payments are **KiteAI testnet pieUSD** when the wallet can pay, otherwise **Simulated**. The agent card is a **testnet wallet**, not Passport-verified on Vercel. Reppo runs only with `REPPO_API_KEY`; verdicts are async and may not appear in a short demo.
+**Simulated / honest limits:** sellers are mocks in `lib/market/catalog.ts`; savings vault 85/15 is **list price minus paid price**, not money collected. Payments are **KiteAI testnet pieUSD** when the wallet can pay, otherwise **Simulated**. Production runs **Rail 1** (`kite-passport-sandbox`) when Vercel secrets are set; the agent card shows Passport only when live `kpass` confirms it, and may still read **testnet wallet** otherwise. Reppo runs only with `REPPO_API_KEY`; verdicts are async and may not appear in a short demo.
 
 ## 2-minute demo script
 
@@ -27,13 +27,13 @@ Use [demo.md](./demo.md) for the 90-second path (empty list refusal first). This
 5. **1:35** — **Try to overspend** → explain list block vs weekly cap (add Espresso max $349 if you need the **$300 week** sentence).
 6. **1:50** — **Reset demo** clears ledger, not the list.
 
-Say aloud: mock sellers, simulated payments if shown, testnet wallet not Passport.
+Say aloud: mock sellers, simulated payments if shown, and whether the agent card shows Passport or testnet wallet.
 
 ## X post draft
 
 > Melit haggles with mock sellers, then two server checks run before pay: a **signed shopping list** (what) and a **$300 / 7-day Spend Guard** (how much). Each round calls @openservai SERV Reasoning and shows the trail—or **Fallback heuristic** when SERV did not answer.
 >
-> Payments: KiteAI **testnet** pieUSD when possible, else **Simulated**. Agent card is a **testnet wallet**, not Passport. Vault 85/15 is savings math, not a real fee.
+> Payments: KiteAI **testnet** pieUSD when possible (Passport Rail 1 on the live deploy when configured), else **Simulated**. The card says Passport only when kpass confirms it. Vault 85/15 is savings math, not a real fee.
 >
 > #SERVHackathon
 > https://github.com/Agozie180/Melit · https://melit.vercel.app/
