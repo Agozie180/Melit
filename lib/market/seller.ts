@@ -74,18 +74,38 @@ function walkMessage(p: SellerPersonality): string {
   }
 }
 
+/** How Melit's reputation with this seller changes their behaviour. Defaults to neutral. */
+export interface SellerMood {
+  /** Multiplier on concessions (1 = normal, lower = concedes less per round). */
+  willingness: number;
+  /** Fraction added on top of the hidden floor (0 = none). */
+  floorPremium: number;
+}
+
+export const NEUTRAL_MOOD: SellerMood = { willingness: 1, floorPremium: 0 };
+
+/** The floor the seller holds out for right now, given their mood. Server-only (uses the hidden floor). */
+export function effectiveFloor(item: CatalogItem, mood: SellerMood = NEUTRAL_MOOD): number {
+  const premium = Math.min(0.1, Math.max(0, mood.floorPremium));
+  if (premium === 0) return item.floorPriceCents;
+  return Math.min(item.listPriceCents, Math.ceil((item.floorPriceCents * (1 + premium)) / 100) * 100);
+}
+
 /**
  * @param currentAskCents the seller's latest asking price (list price before round 1)
  * @param round 1-based round number of this offer
+ * @param mood reputation-driven adjustments (see lib/learning/reputation.ts)
  */
 export function sellerRespond(
   item: CatalogItem,
   offerCents: number,
   currentAskCents: number,
   round: number,
+  mood: SellerMood = NEUTRAL_MOOD,
 ): SellerReply {
   const personality = getSeller(item.sellerId).personality;
-  const floor = item.floorPriceCents;
+  const floor = effectiveFloor(item, mood);
+  const willingness = Math.min(1, Math.max(0.5, mood.willingness));
 
   if (offerCents >= floor || offerCents >= currentAskCents) {
     return { status: "accept", priceCents: offerCents, message: acceptMessage(personality, offerCents) };
@@ -95,7 +115,7 @@ export function sellerRespond(
   }
 
   const style = STYLES[personality];
-  const share = style.firstConcession * Math.pow(style.shrink, round - 1);
+  const share = style.firstConcession * Math.pow(style.shrink, round - 1) * willingness;
   const concession = Math.max(100, Math.round((currentAskCents - floor) * share));
   const nextAsk = Math.max(floor, currentAskCents - concession);
   // Whole-dollar asks read more like a real seller.
