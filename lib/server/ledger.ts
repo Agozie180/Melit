@@ -2,7 +2,8 @@
 //
 // There is no database: the ledger lives in the browser and is sent with every request.
 // Every entry is HMAC-signed by the server when a purchase is approved, so a client cannot
-// lower an amount, back-date a purchase, or invent a refund without breaking a signature.
+// lower an amount, back-date a purchase, rename the item, or invent a refund without breaking
+// a signature.
 // Any extra fields the client adds (e.g. `weeklySpentCents: 0`) are stripped by zod and
 // ignored; the server always recomputes the window total from the entries themselves.
 
@@ -42,10 +43,14 @@ export function ledgerSecret(): string {
 }
 
 function canonical(e: Omit<LedgerEntry, "sig">): string {
+  // v3 covers the item and seller names. v2 did not, so a client could rename a purchase
+  // and the quantity check would no longer count it. Old signatures fail closed.
   return [
-    "v2",
+    "v3",
     e.id,
     e.itemId,
+    e.itemName,
+    e.sellerName,
     e.listPriceCents,
     e.paidCents,
     e.savedCents,

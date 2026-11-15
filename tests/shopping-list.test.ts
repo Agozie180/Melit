@@ -127,6 +127,17 @@ describe("A tampered client list cannot bypass the server check", () => {
     expect(exhausted.reason).toMatch(/none are left/);
   });
 
+  it("rejects a signed ledger entry whose item name was rewritten", () => {
+    const list = allow("Wireless Earbuds", 120_00, 1);
+    const entry = bought("Wireless Earbuds", 90_00);
+    const renamed = { ...entry, itemName: "Not Earbuds" };
+    const result = authorizePurchase([renamed], list, "Wireless Earbuds", 90_00, NOW, SECRET);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/signature mismatch/);
+    const sellerRenamed = { ...entry, sellerName: "Someone else" };
+    expect(authorizePurchase([sellerRenamed], list, "Wireless Earbuds", 90_00, NOW, SECRET).allowed).toBe(false);
+  });
+
   it("rejects an unsigned list and a list signed with another secret", () => {
     const unsigned = { items: [{ name: "Wireless Earbuds", maxPrice: 500_00, quantity: 9 }] };
     expect(authorizePurchase([], unsigned, "Wireless Earbuds", 10_00, NOW, SECRET).allowed).toBe(false);
