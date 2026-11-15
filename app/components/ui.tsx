@@ -1,7 +1,15 @@
-import type { ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-black/[0.07] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`}>{children}</section>;
+export function Card({
+  children,
+  className = "",
+  ...rest
+}: { children: ReactNode; className?: string } & ComponentPropsWithoutRef<"section">) {
+  return (
+    <section className={`rounded-2xl border border-black/[0.07] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${className}`} {...rest}>
+      {children}
+    </section>
+  );
 }
 
 export function CardTitle({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
@@ -21,9 +29,16 @@ const BADGE_TONES = {
   violet: "bg-violet-50 text-violet-800 ring-violet-200",
 } as const;
 
-export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: keyof typeof BADGE_TONES }) {
+export function Badge({
+  children,
+  tone = "neutral",
+  ...rest
+}: { children: ReactNode; tone?: keyof typeof BADGE_TONES } & ComponentPropsWithoutRef<"span">) {
   return (
-    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${BADGE_TONES[tone]}`}>
+    <span
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${BADGE_TONES[tone]}`}
+      {...rest}
+    >
       {children}
     </span>
   );

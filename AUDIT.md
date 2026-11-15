@@ -32,6 +32,10 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 ## Open
 
+### B0. Passport on Vercel (Rail 1)
+
+**Path added 15 Nov 2026 evening.** `scripts/download-kpass.mjs` installs `vendor/kpass-linux-amd64` at build. `KPASS_RUNTIME_BUNDLE_B64` (from `npm run kite:export-runtime`) materializes `~/.kite-passport` into `/tmp` via `lib/kite/kpass-runtime.ts`. `MELIT_KPASS=1` or the bundle env enables Rail 1. **Owner checklist for a live Passport deploy:** (1) `KPASS_RUNTIME_BUNDLE_B64` secret after local `kpass login`, (2) `KPASS_SESSION_ID` and `KPASS_BASE_URL`, (3) `SELLER_BASE_URL` = public Melit URL, (4) same `MELIT_ORDER_SECRET` locally and on Vercel, (5) Kite merchant allowlist for that URL (otherwise `sandbox_merchant_not_allowlisted`). **Still blocked on the public demo** until those are set. **Test:** `tests/kpass-runtime.test.ts`, `npm run download:kpass`, `npm run smoke:browser` (prod build).
+
 ### B1. The public URL matches `main` (shopping list + SERV)
 
 Production https://melit.vercel.app on 15 Nov 2026 (deploy for `main` after the SERV fix) serves the shopping list UI, `reasoning.configured: true`, Reppo configured, testnet payments, identity **not** Passport-verified. **Preview** deploys may require Vercel Authentication unless a share link is used.

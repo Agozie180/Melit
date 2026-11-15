@@ -54,6 +54,18 @@ export function AgentCard({ info }: { info: AgentInfo | null }) {
         <dd className="text-right">
           {payments.rails.length ? payments.rails.map((r) => RAIL_LABEL[r]).join(" → ") : <span className="text-red-700">none configured</span>}
         </dd>
+        {identity.passportSession && (
+          <>
+            <dt className="text-neutral-500">Passport session</dt>
+            <dd className="text-right text-emerald-800">
+              {identity.passportSession.remainingUsd != null
+                ? `${identity.passportSession.remainingUsd} left`
+                : identity.passportSession.maxTotalUsd != null
+                  ? `cap ${identity.passportSession.maxTotalUsd}`
+                  : identity.passportSession.sessionId.slice(0, 12)}
+            </dd>
+          </>
+        )}
         {payments.mode === "testnet" && (
           <>
             <dt className="text-neutral-500">Testnet scale</dt>

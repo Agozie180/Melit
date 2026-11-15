@@ -4,15 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/download-kpass.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "kite:setup": "node scripts/kite-setup.mjs",
+    "kite:export-runtime": "node scripts/export-kpass-runtime.mjs",
+    "download:kpass": "node scripts/download-kpass.mjs",
     "testnet:balance": "node scripts/testnet-balance.mjs",
     "verify:serv": "npx --yes tsx scripts/verify-serv-negotiate.mts",
-    "verify:serv-payload": "npx --yes tsx scripts/probe-serv-payload.mts"
+    "verify:serv-payload": "npx --yes tsx scripts/probe-serv-payload.mts",
+    "smoke:browser": "node scripts/run-browser-smoke.mjs",
+    "playwright:install": "playwright install chromium"
   },
   "dependencies": {
     "@x402/core": "^2.31.0",
@@ -32,6 +37,7 @@
     "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "playwright": "^1.65.1",
     "tailwindcss": "4.3.3",
     "typescript": "^5",
     "vitest": "^5.1.0"

@@ -4,7 +4,8 @@ import { getReasoningAdapter } from "@/lib/adapters/reasoning";
 import { getReppoClient } from "@/lib/adapters/reppo";
 import { publicCatalog } from "@/lib/market/catalog";
 import { MELIT_FEE_RATE, WEEKLY_CAP_CENTS } from "@/lib/money";
-import { configuredRails, paymentMode } from "@/lib/payments";
+import { kpassEnabled, configuredRails, paymentMode } from "@/lib/payments";
+import { kpassReady } from "@/lib/kite/kpass-runtime";
 import { KITE_TESTNET, testnetScale } from "@/lib/kite/config";
 
 export async function GET() {
@@ -14,6 +15,15 @@ export async function GET() {
   const mode = paymentMode();
   return Response.json({
     identity: await getAgentIdentity(),
+    passport: {
+      enabled: kpassEnabled(),
+      runtimeReady: kpassReady(),
+      note: kpassEnabled()
+        ? kpassReady()
+          ? "kpass binary + runtime bundle loaded (Rail 1 may run on this deploy)."
+          : "Set KPASS_RUNTIME_BUNDLE_B64 from npm run kite:export-runtime for Vercel Rail 1."
+        : "Rail 1 off. Set MELIT_KPASS=1 or KPASS_RUNTIME_BUNDLE_B64.",
+    },
     payments: {
       mode,
       rails: configuredRails(mode).map((r) => r.id),

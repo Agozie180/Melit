@@ -35,7 +35,7 @@ People pay the sticker price because haggling is awkward and the money leaks out
 2. **A $300 rolling 7-day cap.** That is how much it can spend. Both checks are in `authorizePurchase`, and a blocked result never calls a payment rail.
 3. **A negotiation.** Each round asks SERV Reasoning first. If the call fails or the JSON does not validate, the round is labelled **Fallback heuristic**.
 4. **An identity card** that says Passport sandbox only when `kpass` confirms it. On Vercel it shows the KiteAI testnet wallet and says it is not Passport-verified, or a labelled simulated id when there is no key.
-5. **A payment rail** that sends pieUSD on KiteAI testnet (chain 2368) when a throwaway key is set and the wallet can pay. A dry wallet, or no key, produces a receipt labelled Simulated or Recorded. `kpass` does not run on Vercel.
+5. **A payment rail** that sends pieUSD on KiteAI testnet (chain 2368) when a throwaway key is set and the wallet can pay. A dry wallet, or no key, produces a receipt labelled Simulated or Recorded. On Vercel, Rail 1 runs only when `KPASS_RUNTIME_BUNDLE_B64` and session env are set (see `.env.example`); otherwise the deploy uses Rail 2.
 6. **A learning loop.** Owner notes and seller reviews move a capped strategy. Reppo is called only when `REPPO_API_KEY` is set, and a score appears only after Reppo returns one.
 
 ## How a purchase runs
@@ -58,7 +58,7 @@ The invariants and the cut line are in [ARCHITECTURE.md](./ARCHITECTURE.md). The
 | --- | --- | --- |
 | SERV Reasoning | Yes, when `OPENSERV_API_KEY` is set | `POST https://inference-api.openserv.ai/v1/chat/completions` in `lib/adapters/reasoning.ts`. Prompt `melit-negotiator-v3`. |
 | Kite track: spending limit you control | Yes, in server code | `lib/guard/spend-guard.ts` and `lib/server/shopping-list.ts`. The limit is per browser, not a Passport session, on the public deploy. |
-| Kite Passport | Only on a local machine with `kpass` | The public site cannot run the CLI. The card says so. |
+| Kite Passport | Local `kpass` or Vercel with runtime bundle | Without `KPASS_RUNTIME_BUNDLE_B64`, the public card stays testnet wallet. |
 | pieUSD on KiteAI testnet (chain 2368) | When `AGENT_PRIVATE_KEY` is set and the wallet can pay | Recorded sample hashes live in `data/recorded-receipts.json`. A failed or unconfigured rail is labelled. |
 | Reppo Evaluation API | When `REPPO_API_KEY` is set | `lib/adapters/reppo.ts`. The UI does not invent a score. |
 | Dolphin | No | Melit does not call Dolphin models. |
@@ -103,7 +103,7 @@ No API key is required. Without one, the banner says so and every round is label
 - The list and the ledger live in this browser. **Reset demo**, or clearing storage, starts the week over and restores quantities. On the public demo every visitor is paid from one shared testnet wallet, so both controls are per browser.
 - `POST /api/shopping-list` signs any valid rows. The signature proves this server saw them. It does not prove which person approved them.
 - Rate limits live in each serverless instance. A burst can land on more than one instance. See [Abuse limits](#how-the-spend-guard-works).
-- `kpass` cannot run on Vercel, so the live identity is not a Passport check.
+- Passport on Vercel needs `npm run kite:export-runtime` pasted as `KPASS_RUNTIME_BUNDLE_B64` plus `KPASS_SESSION_ID` and a public `SELLER_BASE_URL`. Without those secrets the live identity is not Passport-verified.
 - The 15% line in the vault is not money collected from anyone.
 
 ## Non-goals
@@ -203,7 +203,7 @@ Reasoning, identity and payments each sit behind an interface, so they can be sw
 
 Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling forward, future-dated entries, invalid amounts, a client-supplied fake total, an edited amount, a back-dated entry, a forged signature and a malformed ledger. They also cover an off-list purchase, a price over the list max, a used-up quantity, a listed item that still fails the weekly cap, and a tampered list (edited max, added item, or a `remaining` field) that cannot get past the server.
 
-**Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week, which also restores shopping-list quantities. The Reset demo button does exactly this on purpose. It does not clear the shopping list. Saving a new list is the owner's approval, so anyone who can use the demo as you can also save a wider list. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so both controls apply per browser, not per wallet. A production version would persist the list and the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
+**Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week, which also restores shopping-list quantities. The Reppo job track is also per-browser (localStorage), not server-backed. The Reset demo button does exactly this on purpose. It does not clear the shopping list. Saving a new list is the owner's approval, so anyone who can use the demo as you can also save a wider list. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so both controls apply per browser, not per wallet. A production version would persist the list and the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
 
 **Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend`, `/api/shopping-list`, and `/api/reppo` (submit and poll) use `lib/server/rate-limit.ts`. `POST /api/reppo` also dedupes each deal and enforces a 20-second gap per IP before a new submission. `GET /api/reppo/[id]` rejects malformed ids. These counters live in each serverless instance, and Vercel spreads one client's requests over several instances (visible in the `X-RateLimit-Remaining` header on the shared limiter), so on the deployment they bound abuse per instance rather than exactly. A Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those routes) is also configured, but a 24-request burst test did not trigger it, so treat it as unverified. A shared counter (e.g. Upstash Redis) is the proper fix and is on the roadmap. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
 
@@ -239,7 +239,7 @@ Each ledger entry stores the rail that paid, the tx hash and a KiteScan link, an
 
 **Why a public seller URL:** with `kpass session execute`, the Passport *backend* calls the seller URL and settles the payment, so the mock seller checkout must be reachable from the internet (`SELLER_BASE_URL`, for example your Vercel deploy). A `localhost` seller can't be paid through Rail 1, so those payments use Rail 2.
 
-**Demo video vs deployed site:** kpass needs a local terminal and a passkey, so the Rail 1 attempt only runs on a local server (`MELIT_KPASS=1`). The deployed site can't run kpass, so it uses Rail 2 only. The live demo at https://melit.vercel.app makes **real KiteAI testnet payments** from a throwaway wallet funded with faucet pieUSD, at `MELIT_TESTNET_SCALE=0.001` (a $300 week = 0.3 pieUSD). `MELIT_SIMULATED_FALLBACK=1` covers the case where that wallet runs dry, and those receipts are labelled Simulated. With `MELIT_PAYMENT_MODE=recorded` the site instead replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
+**Demo video vs deployed site:** kpass needs a local terminal and a passkey for first-time setup (`npm run kite:setup`). After export, Vercel can run the bundled CLI from `KPASS_RUNTIME_BUNDLE_B64`. Without that secret the deployed site uses Rail 2 only. The live demo at https://melit.vercel.app makes **real KiteAI testnet payments** from a throwaway wallet funded with faucet pieUSD, at `MELIT_TESTNET_SCALE=0.001` (a $300 week = 0.3 pieUSD). `MELIT_SIMULATED_FALLBACK=1` covers the case where that wallet runs dry, and those receipts are labelled Simulated. With `MELIT_PAYMENT_MODE=recorded` the site instead replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
 
 ## Reppo track: Melit learns from feedback
 
