@@ -23,12 +23,16 @@ const weeklyCapUsd = 300;
 const maxTotal = +(weeklyCapUsd * scale).toFixed(6);
 const maxPerTx = maxTotal;
 const agentType = argValue("--agent-type") ?? process.env.KPASS_AGENT_TYPE ?? "melit";
+// Kite's production backend currently answers sandbox requests as "live"; the staging backend
+// serves sandbox mode (faucet, agent registration, sessions). Pass --base-url or KPASS_BASE_URL.
+const baseUrl = argValue("--base-url") ?? process.env.KPASS_BASE_URL;
+const agentWallet = argValue("--agent-wallet");
 
 const bin =
   process.env.KPASS_BIN ?? (existsSync(join(homedir(), ".local", "bin", "kpass")) ? join(homedir(), ".local", "bin", "kpass") : "kpass");
 
 function kpass(args, { allowFail = false } = {}) {
-  const full = [...args, "--output", "json"];
+  const full = [...args, ...(baseUrl ? ["--base-url", baseUrl] : []), "--output", "json"];
   console.log(`\n$ kpass ${full.join(" ")}`);
   if (dryRun) return null;
   try {
@@ -76,11 +80,16 @@ if (!dryRun && !JSON.stringify(status).toLowerCase().includes("sandbox")) {
 }
 
 const wallet = kpass(["wallet", "address"]);
-const recipient = argValue("--recipient") ?? findAll(wallet, (v) => typeof v === "string" && /^0x[0-9a-fA-F]{40}$/.test(v))[0];
+const kiteWallet = Array.isArray(wallet?.wallets) ? wallet.wallets.find((w) => w.chain === "kite")?.address : undefined;
+const recipient = argValue("--recipient") ?? kiteWallet;
 if (recipient || dryRun) {
-  kpass(["faucet", "drop", "--recipient", recipient ?? "<wallet address>", "--token", "pieUSD"], { allowFail: true });
+  kpass(["faucet", "drop", "--recipient", recipient ?? "<Passport kite wallet>", "--token", "pieUSD"], { allowFail: true });
 } else {
-  console.log("Couldn't find an EVM wallet address above; re-run with --recipient <address>.");
+  console.log("Couldn't find the Passport kite wallet above; re-run with --recipient <address>.");
+}
+if (agentWallet) {
+  // Rail 2's AGENT_PRIVATE_KEY wallet: pieUSD here lets Melit settle gaslessly via x402.
+  kpass(["faucet", "drop", "--recipient", agentWallet, "--token", "pieUSD"], { allowFail: true });
 }
 
 kpass(["agent", "register", "--type", agentType], { allowFail: true });
@@ -113,5 +122,7 @@ if (urls.length) console.log(`  1. Approve the session with your passkey: ${urls
 else console.log("  1. Approve the session with your passkey using the URL printed above.");
 console.log("  2. Wait for approval: kpass session status --request-id <id> --wait --output json");
 console.log(`  3. In .env.local set MELIT_KPASS=1 and KPASS_SESSION_ID=<session id>${ids.length ? ` (candidates: ${ids.join(", ")})` : ""}`);
-console.log("  4. Set SELLER_BASE_URL to a PUBLIC URL serving this app (your Vercel deploy), since Passport's backend fetches the seller checkout itself.");
+console.log("  4. Set SELLER_BASE_URL to a PUBLIC URL serving this app (your Vercel deploy), since Passport's backend fetches the seller checkout itself,");
+console.log("     and the same MELIT_ORDER_SECRET locally and on that deploy.");
+if (baseUrl) console.log(`  5. Set KPASS_BASE_URL=${baseUrl} so Melit's kpass calls use the same backend.`);
 console.log("  5. Set AGENT_PRIVATE_KEY (testnet only) and MOCK_SELLER_PAYTO for the Rail 2 fallback, then `npm run dev`.");
