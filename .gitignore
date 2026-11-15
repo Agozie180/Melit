@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Kite Passport project-local config and agent runtime key (never commit)
+.kite-passport/
