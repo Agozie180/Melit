@@ -4,7 +4,10 @@
 
 Melit is for people who don't know how to haggle or how to save. You give it a weekly budget ($300). It negotiates the price before it buys, buys only when the deal is good and the budget allows it, and moves what it saved into a visible Savings Vault. It can never spend more than $300 in any rolling 7-day window, and that rule lives in server code, not in a prompt.
 
-Built for **SERV Hackathon Edition 02, Kite track**: "agents with a verifiable identity and spending limits you control, so they can shop, book and pay on your behalf, safely."
+Built for **SERV Hackathon Edition 02**:
+
+- **Kite track:** "agents with a verifiable identity and spending limits you control, so they can shop, book and pay on your behalf, safely."
+- **Reppo track:** Melit learns from feedback. Its owner, the sellers and Reppo's external evaluator panel each feed back into a bounded negotiation strategy. See [Reppo track](#reppo-track-melit-learns-from-feedback).
 
 ## The problem
 
@@ -18,6 +21,7 @@ Most people pay the list price. They don't negotiate because it's awkward, and t
 4. **Saves the difference.** `saved = list price - paid price` goes into the Savings Vault.
 5. **Hard weekly cap.** The Spend Guard blocks any payment that would push the last 7 days over $300, with a plain-English reason.
 6. **Pays on KiteAI testnet.** Approved purchases are paid in pieUSD on KiteAI testnet (chain 2368). It tries the Kite Passport sandbox first and falls back to a direct testnet transfer. Each ledger row records the rail that paid and links the transaction on KiteScan.
+7. **Learns from feedback.** A strategy profile (aggressiveness, walk-away limit, priority, notes) is sent with every negotiation. You can rate each deal, sellers review Melit, and Reppo judges each purchase. Each source changes the strategy by a small, capped step.
 
 ## How SERV Reasoning is used
 
@@ -64,6 +68,16 @@ lib/
   payments/testnet-rail.ts  Rail 2: viem ERC-20 pieUSD transfer from AGENT_PRIVATE_KEY
   payments/offline-rails.ts Recorded-receipt replay and simulated receipts (both move no money)
   payments/order-token.ts   Signed orders: the seller checkout only charges Guard-approved orders
+  learning/profile.ts       Strategy profile + applyBoundedUpdate (hard ranges, per-source step caps)
+  learning/feedback.ts      SERV turns owner notes / Reppo verdicts into strict-JSON updates (labelled fallback)
+  learning/reputation.ts    Seller reputation -> willingness and floor premium
+  learning/reppo-input.ts   Synthetic, scrubbed transcript submitted to Reppo
+  learning/reppo-queue.ts   One-at-a-time Reppo job queue (pure reducer)
+  learning/metrics.ts       Before/after-feedback metrics
+  market/reviews.ts         Deterministic, signed seller reviews (server-only, uses the hidden floor)
+  adapters/reppo.ts         Reppo Eval Router client (POST/GET /api/v1/agents/evals)
+app/api/feedback/route.ts   POST owner feedback or "learn from this Reppo verdict"
+app/api/reppo/route.ts      POST submit a signed purchase summary to Reppo; GET /api/reppo/[id] polls it
 scripts/kite-setup.mjs      Guided `kpass` sandbox setup (login check, faucet, agent, 7-day session)
 tests/                      vitest: spend guard, ledger tampering, sellers, negotiator, payment rails
 ```
@@ -120,10 +134,65 @@ Each ledger entry stores the rail that paid, the tx hash and a KiteScan link, an
 
 **Demo video vs deployed site:** kpass needs a local terminal and a passkey, so the Rail 1 attempt only runs on a local server (`MELIT_KPASS=1`). The deployed site can't run kpass, so it uses Rail 2 only. The live demo at https://melit.vercel.app makes **real KiteAI testnet payments** from a throwaway wallet funded with faucet pieUSD, at `MELIT_TESTNET_SCALE=0.001` (a $300 week = 0.3 pieUSD). `MELIT_SIMULATED_FALLBACK=1` covers the case where that wallet runs dry, and those receipts are labelled Simulated. With `MELIT_PAYMENT_MODE=recorded` the site instead replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
 
+## Reppo track: Melit learns from feedback
+
+Melit gets better at negotiating from three kinds of feedback. All of them flow into one **strategy profile** (`lib/learning/profile.ts`):
+
+| Setting | Range | What it does |
+| --- | --- | --- |
+| `aggressiveness` | 0 to 1 (default 0.5) | How far below the market reference Melit opens and how slowly it concedes |
+| `walkAwayThreshold` | 0.85 to 1.30 × market (default 1.05) | The most Melit will pay. Enforced as a **code guardrail**, not just a prompt hint |
+| `priority` | `save` / `speed` | Standing preference; also pre-selects the request form |
+| `notes` | at most 6, ≤ 140 chars each | Lessons in the owner's words |
+
+The profile is stored in localStorage, sent with every request, clamped by the server with zod, and injected into **every SERV negotiation call** (prompt `melit-negotiator-v2`) together with Melit's seller reputation. The fallback heuristic uses it too. It is shown in the **Melit's strategy** card.
+
+**Bounded updates.** Every change goes through `applyBoundedUpdate`. Whatever proposes a change (SERV, a rule or a Reppo verdict), one update can move aggressiveness by at most ±0.15 (owner), ±0.10 (Reppo) or ±0.05 (market), and the walk-away limit by ±0.05 / ±0.04 / ±0.02. It can add at most one note and remove at most one. Results are always clamped to the hard ranges. A 2,000-step fuzz test checks this, including NaN and infinite deltas.
+
+### 1. Owner feedback
+After each negotiation, the **Deals & feedback** card asks for 👍 or 👎 and an optional note. `POST /api/feedback` sends the signed deal summary, the note and the current profile to **SERV Reasoning** (prompt `melit-learner-v1`). SERV returns strict JSON `{aggressivenessDelta, walkAwayThresholdDelta, priority, addNote, removeNoteIndex, learned}`, which is validated with zod and then bounded. The `learned` sentence is shown as **What Melit learned**. If SERV fails, a keyword rule proposes the update instead and it is labelled **Fallback rule** with the reason.
+
+### 2. Market feedback (seller reviews)
+After every negotiation, the mock seller rates Melit from 1 to 5 using **deterministic rules** (`lib/market/reviews.ts`, no LLM). The rating depends on Melit's lowest offer relative to the seller's hidden floor (generous / firm / aggressive / insulting), how many rounds it took and how it ended. The floor is never revealed: the review only carries a coarse pressure label. Reviews are HMAC-signed, and the server ignores unsigned or edited ones.
+- **Reputation changes seller behaviour.** An average rating of 5 keeps sellers at normal willingness. Each star lost makes them concede 10% less per round (down to 60%). At 2.5★ or lower, they also hold out 3–5% above their usual floor. Sellers with no reviews of their own use the market-wide average ("sellers talk").
+- **Melit learns from it.** An insulting lowball or a rating of 2 or less lowers aggressiveness by 0.05; a seller accepting with no pressure raises it by 0.03. The **Market reputation** card shows this.
+
+### 3. Reppo Evaluation API (async judge)
+After each **purchase**, Melit submits the negotiation to the [Reppo Eval Router](https://eval.reppo.xyz/agents.md):
+
+```
+POST https://eval.reppo.xyz/api/v1/agents/evals      Authorization: Bearer $REPPO_API_KEY
+{ "taskType": "action", "input": "<what the user asked for + every round's offer, reasoning and seller reply + outcome>" }
+-> 201 { "id": "...", "status": "QUEUED" }
+GET  https://eval.reppo.xyz/api/v1/agents/evals/{id}
+-> { "status": "QUEUED|PROCESSING|COMPLETED|FAILED", "result": { "score", "route": "ship|review|block", "decision", "confidence", "reason", "rubric_scores", "consensus" }, "trace": {...} }
+```
+
+- **Synthetic data only.** The input is built from mock-seller names, catalogue prices and Melit's reasoning. It never includes keys, wallet addresses, tx hashes or personal data, and it is scrubbed afterwards for anything that looks like a 0x address, long hex, email, URL or token (`lib/learning/reppo-input.ts`, tested).
+- **Never blocks.** Jobs go into a browser-side queue (`melit.reppo.v1`). A background hook submits one at a time and polls every 10 s, and shows each job as **queued**, **pending**, **verdict** (score, route, confidence, rubric, each evaluator model's score) or **failed**. Purchases never wait for it. Transient errors back off exponentially; 401/402/400 fail the job.
+- **Strategy updates don't wait for Reppo.** Owner and market feedback apply immediately. When a verdict arrives, `POST /api/feedback {kind: "reppo", evalId}` makes the server **re-fetch the verdict from Reppo itself**, check that the evaluated text is exactly this deal's transcript, and ask SERV for a bounded update. The update is recorded as **Learned from Reppo verdict**.
+- **Abuse limits.** Only server-signed summaries of real purchases less than an hour old are accepted. Each deal is submitted at most once, and there is a per-client gap between submissions. A completed text evaluation costs 440 Reppo credits.
+
+A real verdict for one of Melit's negotiations (earbuds bought for $88.55 against a $129 list price) came back in about 70 s: score **97**, route `review`, decision `accept`, confidence medium, rubric scope 100 / safety 100 / correctness 100 / reversibility 81. The evaluators were gpt-4o (100), deepseek-chat (100) and glm-5-2 (96).
+
+**Docs note:** the endpoints on docs.reppo.ai (`/agents/eval-requests/*`) are outdated and currently return 404. Melit uses the live API described at https://eval.reppo.xyz/agents.md, verified with real requests.
+
+### Dashboard
+**Is Melit getting better?** compares deals run with the default strategy (profile version 0) against deals run after feedback changed it at least once:
+- average % saved versus list price, and price paid versus the market reference;
+- deals closed % (guard blocks and payment errors excluded);
+- owner approval % (👍 out of rated deals);
+- the average Reppo score over verdicts that were actually returned.
+
+It only uses negotiations you ran in this browser. Nothing is pre-filled or seeded, so a fresh browser shows empty metrics until you start using it.
+
 ## What's simulated vs real
 
 | Part | Status |
 | --- | --- |
+| Learning loop (profile, owner feedback, bounded updates) | **Real.** SERV proposes updates; code bounds them. Fallback updates are labelled. |
+| Seller reviews and reputation | **Deterministic rules** from the mock sellers, signed by the server. |
+| Reppo verdicts | **Real Reppo Eval Router evaluations** when `REPPO_API_KEY` is set. Only verdicts Reppo actually returned are shown. |
 | SERV Reasoning negotiation decisions | **Real** when `OPENSERV_API_KEY` is set. Rounds that use the fallback are labelled. |
 | Spend Guard and ledger signing | **Real**, enforced in server code, unit tested. |
 | Sellers and marketplace | **Mock sellers**: four labelled sellers with deterministic rules. Only their checkout endpoint is real x402. |
@@ -147,7 +216,7 @@ git clone https://github.com/Agozie180/Melit melit && cd melit
 npm install
 cp .env.example .env.local     # set OPENSERV_API_KEY (from https://console.openserv.ai/)
 npm run dev                    # http://localhost:3000
-npm test                       # Spend Guard, negotiation and payment-rail tests
+npm test                       # Spend Guard, negotiation, payment-rail and learning-loop tests
 ```
 
 Without a key the app still runs, but every round is labelled **Fallback heuristic** and a banner says SERV isn't configured. With no payment rail configured, payments are **simulated** and labelled that way.
@@ -161,7 +230,7 @@ Without a key the app still runs, but every round is labelled **Fallback heurist
 ### Deploy to Vercel
 
 1. Import the repo in Vercel (framework preset: Next.js).
-2. Set `OPENSERV_API_KEY`. For live testnet payments also set `AGENT_PRIVATE_KEY` (throwaway testnet key, as a *sensitive* variable), `MOCK_SELLER_PAYTO`, `MELIT_PAYMENT_MODE=testnet`, `MELIT_TESTNET_SCALE=0.001`, `MELIT_SIMULATED_FALLBACK=1`, `SELLER_BASE_URL` and `MELIT_ORDER_SECRET`. Without a key, Vercel defaults to `recorded` mode: it replays committed receipts, or issues labelled simulated receipts if there are none.
+2. Set `OPENSERV_API_KEY`. For live testnet payments also set `AGENT_PRIVATE_KEY` (throwaway testnet key, as a *sensitive* variable), `MOCK_SELLER_PAYTO`, `MELIT_PAYMENT_MODE=testnet`, `MELIT_TESTNET_SCALE=0.001`, `MELIT_SIMULATED_FALLBACK=1`, `SELLER_BASE_URL` and `MELIT_ORDER_SECRET`. For the Reppo judge, set `REPPO_API_KEY` (sensitive). Without a key, Vercel defaults to `recorded` mode: it replays committed receipts, or issues labelled simulated receipts if there are none.
 3. Deploy. The negotiation route streams its response and allows up to 120 s per request.
 
 Never put a mainnet key or a funded personal wallet in any env var. `AGENT_PRIVATE_KEY` is for a throwaway testnet wallet only.
