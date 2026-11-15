@@ -174,7 +174,7 @@ export async function* purchase(
     rail: receipt.rail,
     txHash: receipt.txHash,
     explorerUrl: receipt.explorerUrl,
-    testnetAmount: receipt.testnetAmount,
+    testnetAmount: receipt.testnetAmount ? `${receipt.testnetAmount} ${receipt.asset ?? ""}`.trim() : null,
   });
   yield { type: "purchased", entry, receipt, guard };
 }

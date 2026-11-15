@@ -28,7 +28,7 @@ export default function Dashboard() {
   const paymentsLabel = !info
     ? "…"
     : info.payments.mode === "testnet"
-      ? "KiteAI testnet (pieUSD)"
+      ? "KiteAI testnet"
       : info.payments.mode === "recorded"
         ? "recorded testnet receipts, no new payments"
         : "simulated, no money moves";
@@ -125,7 +125,7 @@ export default function Dashboard() {
       </div>
 
       <footer className="mt-8 text-center text-xs text-neutral-500">
-        Melit keeps 15% of what it saves you; you keep 85%. Sellers are mocks. Testnet payments use free test tokens (pieUSD on KiteAI
+        Melit keeps 15% of what it saves you; you keep 85%. Sellers are mocks. Testnet payments use free test tokens (pieUSD or faucet USDT on KiteAI
         testnet, scaled down); simulated and recorded receipts move no money and are labelled as such.
       </footer>
     </main>

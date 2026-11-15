@@ -30,7 +30,7 @@ export function LedgerTable({ ledger }: { ledger: LedgerEntry[] }) {
                     <p className="text-xs text-neutral-500">{e.sellerName}</p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-neutral-500">
                       <RailBadge rail={e.rail} />
-                      {e.testnetAmount && <span>{e.testnetAmount} pieUSD</span>}
+                      {e.testnetAmount && <span>{e.testnetAmount}</span>}
                       <TxLink txHash={e.txHash} explorerUrl={e.explorerUrl} />
                     </p>
                   </td>
