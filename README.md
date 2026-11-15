@@ -1,17 +1,29 @@
 # Melit — it haggles, then the server decides whether it may pay
 
-**SERV Hackathon Edition 02.** Main track: Kite. Secondary: Reppo. Judged on creativity, user readiness, and revenue potential. The published prize pool is **$5,000 total**. Per-track amounts were still TBA on the event page on 15 Nov 2026, so this README does not invent a split.
+[![tests](https://github.com/Agozie180/Melit/actions/workflows/test.yml/badge.svg)](https://github.com/Agozie180/Melit/actions/workflows/test.yml)
+[![coverage](https://img.shields.io/badge/coverage-46%25%20lines-yellow)](https://github.com/Agozie180/Melit/blob/main/README.md#measured)
+[![live demo](https://img.shields.io/badge/live%20demo-melit.vercel.app-111111)](https://melit.vercel.app)
+[![KiteScan wallet](https://img.shields.io/badge/KiteScan-testnet%20wallet-3b82f6)](https://testnet.kitescan.ai/address/0x14433179E3450A5a4D5A7e0a6E81627e4e6421a8)
+[![pieUSD](https://img.shields.io/badge/pieUSD-testnet%20contract-3b82f6)](https://testnet.kitescan.ai/address/0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A)
+[![npm](https://img.shields.io/badge/npm-not%20published-lightgrey)](https://github.com/Agozie180/Melit/blob/main/package.json)
+[![program result](https://img.shields.io/badge/program%20result-not%20announced-lightgrey)](https://www.openserv.ai/hackathon-2)
+
+**SERV Hackathon Edition 02.** Main track: Kite. Secondary: Reppo. Judged on creativity, user readiness, and revenue potential. The published prize pool is **$5,000 total**. Per-track amounts were still TBA on the event page on 15 Nov 2026, so this README does not invent a split. There is no award yet, so the program badge says "not announced."
+
+The coverage badge is the line rate from `npm run test:coverage` on 15 Nov 2026: 46.32% of lines in `lib/` and `app/` (763/1647). That number includes the UI, which these tests do not render. `lib/guard/spend-guard.ts` is 100% lines. Melit is not an npm package. The blue badges are the public testnet wallet and the pieUSD token the app pays with. They are not a Sourcify-verified contract written by this repo.
 
 | | |
 | --- | --- |
 | Live app | https://melit.vercel.app |
-| This branch | Deploy it before judging. On 15 Nov 2026 the live URL was an older build with no shopping list. |
+| Production check | Vercel production `dpl_3PaCYdWGiVNf7xi9AMUmi9yACEA9` is READY for `7af69c8`. A fetch of that URL on 15 Nov 2026 contained "Shopping list". |
 | Demo | [demo.md](./demo.md) is the 90-second script. [demo.mp4](./demo.mp4) is an older 1:55 cut and does not follow that script. |
 | Write-up | [SUBMISSION.md](./SUBMISSION.md) |
 | Judging brief | [JUDGING.md](./JUDGING.md) |
 | Blueprint | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | Self-audit | [AUDIT.md](./AUDIT.md) |
-| Reproduce the checks | `npm test` |
+| KiteScan wallet | https://testnet.kitescan.ai/address/0x14433179E3450A5a4D5A7e0a6E81627e4e6421a8 |
+| pieUSD contract | https://testnet.kitescan.ai/address/0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A |
+| Reproduce the checks | `npm test` and `npm run test:coverage` |
 
 > **The model may suggest a price. The server will not pay unless the item is on your signed list, quantity is left, the price is within that item's max, and the last 7 days plus this price is at most $300.**
 
@@ -72,8 +84,9 @@ Numbers below are what the tests assert. Re-run the command rather than trusting
 | A renamed ledger row cannot restore quantity | `signature mismatch`, purchase not allowed | same file, "item name was rewritten" |
 | A blocked purchase does not call the rail | the pay mock is not called | `npm test -- tests/payments.test.ts` |
 | The hidden floor is not in the SERV prompt | the user message does not match `/floor/i` | `npm test -- tests/negotiator.test.ts` |
+| Line coverage of `lib/` and `app/` | 46.32% lines (763/1647). Statements 43.95%. Branches 36.67%. Functions 39.69%. `spend-guard.ts` is 100% lines. UI files are 0% | `npm run test:coverage` |
 
-On 15 Nov 2026, `npm test` reported 87 passing tests.
+On 15 Nov 2026, `npm test` reported 87 passing tests. The coverage row is from the same day's `npm run test:coverage`.
 
 ## Try it in 30 seconds
 

@@ -105,13 +105,13 @@ Filled from the playbook's pre-submission list. A box is checked only where this
 **Verifiability**
 
 - [x] A hosted URL exists, and recorded testnet hashes exist in `data/recorded-receipts.json`.
-- [ ] That hosted URL is this commit. On 15 Nov 2026 it was not.
+- [x] https://melit.vercel.app served `7af69c8` on 15 Nov 2026, and that HTML contained "Shopping list". A later commit is on the URL only after Vercel finishes that deploy.
 - [x] The quantified spend claims in the README name the test command.
 - [ ] No published npm package. Melit is an app, not a library. Nothing to claim here.
 
 **Presentation**
 
-- [x] README has the thesis, the links, the used/not-used table, the measured table, and the limitations.
+- [x] README has the thesis, the proof badges (tests workflow, measured line coverage, live demo, testnet wallet, pieUSD, npm not published, program result not announced), the links, the used/not-used table, the measured table, and the limitations.
 - [x] [demo.md](./demo.md) is a 90-second script that starts with the refusal.
 - [ ] `demo.mp4` is a 1:55 cut. It does not follow that 90-second order. Do not tell a judge they are the same film.
 

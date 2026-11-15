@@ -24,11 +24,13 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 ## Open
 
-### B1. The public URL was an older build
+### B1. The public URL lagged `main`, then caught up
 
-On 15 Nov 2026 the HTML from https://melit.vercel.app contained no "Shopping list". `GET /api/agent` on that host did respond: reasoning configured, Reppo configured, payment mode `testnet`, scale `0.001`, wallet `0x14433179E3450A5a4D5A7e0a6E81627e4e6421a8`, `verified: false`, rails `direct-testnet` and `simulated`.
+Before `main` moved to `7af69c8`, the HTML from https://melit.vercel.app contained no "Shopping list".
 
-**Not fixed here.** Deploying this commit to that URL is a release step, not a code change.
+After that fast-forward, Vercel production `dpl_3PaCYdWGiVNf7xi9AMUmi9yACEA9` was READY for that commit. A fetch of https://melit.vercel.app on 15 Nov 2026 contained "Shopping list". `GET /api/agent` on that host still reported reasoning configured, Reppo configured, payment mode `testnet`, scale `0.001`, wallet `0x14433179E3450A5a4D5A7e0a6E81627e4e6421a8`, `verified: false`, rails `direct-testnet` and `simulated`.
+
+**Status.** The shopping list is on the public URL as of that deploy. The card is still a testnet wallet, not Passport.
 
 ### B2. Rate limits do not survive a second serverless instance
 
@@ -58,9 +60,9 @@ On 15 Nov 2026 the HTML from https://melit.vercel.app contained no "Shopping lis
 
 In `applyGuardrails`, an omitted `shoppingList` is treated as "on list" (`shoppingList === undefined ? true : ...`). `authorizePurchase` still rejects a missing signed list, so this does not call the rail. A future caller that pays from `decide()` alone would not be safe.
 
-### B7. No in-repo test workflow
+### B7. Tests had no workflow
 
-This workspace has no file under `.github/workflows`. `npm test` is a local command. On 15 Nov 2026 it reported 87 passing tests. A clean `npm ci` was not run.
+`.github/workflows/test.yml` now runs `npm ci` and `npm run test:coverage` on pushes to `main` and on pull requests. The first Actions run had not finished when this paragraph was written, so the tests badge may show "no status" until that run ends. Locally, on 15 Nov 2026, `npm ci` completed and `npm test` reported 87 passing tests. `npm run test:coverage` reported 46.32% lines across `lib/` and `app/`.
 
 ## Checked, and not a finding
 
@@ -77,4 +79,4 @@ This workspace has no file under `.github/workflows`. `npm test` is a local comm
 
 ## What a judge should do with this file
 
-Read A1 and run the named test. Read B1 before trusting the public URL. Treat B2 through B7 as unpaid work, not as fixed.
+Read A1 and run the named test. B1's later fetch is the one to trust for the shopping list. Treat B2 through B6 as unpaid work. B7's workflow is in the repo; the Actions run is the check that it stays green.
