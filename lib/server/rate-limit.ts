@@ -27,7 +27,7 @@ type Bucket = { start: number; count: number };
 const buckets = new Map<string, Bucket>();
 const MAX_KEYS = 10_000;
 
-function hit(key: string, limit: number, windowMs: number, now: number): { ok: boolean; retryAfterMs: number } {
+function hit(key: string, limit: number, windowMs: number, now: number): { ok: boolean; retryAfterMs: number; remaining: number } {
   let b = buckets.get(key);
   if (!b || now - b.start >= windowMs) {
     if (buckets.size >= MAX_KEYS) {
@@ -37,9 +37,9 @@ function hit(key: string, limit: number, windowMs: number, now: number): { ok: b
     b = { start: now, count: 0 };
     buckets.set(key, b);
   }
-  if (b.count >= limit) return { ok: false, retryAfterMs: b.start + windowMs - now };
+  if (b.count >= limit) return { ok: false, retryAfterMs: b.start + windowMs - now, remaining: 0 };
   b.count++;
-  return { ok: true, retryAfterMs: 0 };
+  return { ok: true, retryAfterMs: 0, remaining: limit - b.count };
 }
 
 export function clientIp(req: Request): string {
@@ -48,21 +48,34 @@ export function clientIp(req: Request): string {
 
 /** Returns a 429 Response when the request is over any limit, otherwise null (and counts it). */
 export function rateLimit(req: Request, name: keyof typeof LIMITS, now = Date.now()): Response | null {
+  return checkRateLimit(req, name, now).limited;
+}
+
+/** Like rateLimit, plus the smallest per-client allowance left, for an X-RateLimit-Remaining header. */
+export function checkRateLimit(req: Request, name: keyof typeof LIMITS, now = Date.now()): { limited: Response | null; remaining: number } {
   const ip = clientIp(req);
+  let remaining = Infinity;
   for (const rule of LIMITS[name]) {
     for (const [scope, limit] of [[`ip:${ip}`, rule.perClient], ["global", rule.global]] as const) {
       const r = hit(`${name}:${rule.windowMs}:${scope}`, limit, rule.windowMs, now);
+      if (scope !== "global") remaining = Math.min(remaining, r.remaining);
       if (!r.ok) {
         const seconds = Math.max(1, Math.ceil(r.retryAfterMs / 1000));
         const who = scope === "global" ? "This demo is getting a lot of traffic" : "You're going a bit fast";
-        return Response.json(
+        const limited = Response.json(
           { error: `${who}. Please try again in ${seconds}s.`, retryable: true },
-          { status: 429, headers: { "Retry-After": String(seconds) } },
+          { status: 429, headers: { "Retry-After": String(seconds), "X-RateLimit-Remaining": "0" } },
         );
+        return { limited, remaining: 0 };
       }
     }
   }
-  return null;
+  return { limited: null, remaining: Number.isFinite(remaining) ? remaining : 0 };
+}
+
+export function withRemaining(res: Response, remaining: number): Response {
+  res.headers.set("X-RateLimit-Remaining", String(remaining));
+  return res;
 }
 
 export function resetRateLimits() {
