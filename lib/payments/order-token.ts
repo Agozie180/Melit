@@ -18,16 +18,21 @@ const OrderSchema = z.object({
   exp: z.number().int(),
 });
 
+/** MELIT_ORDER_SECRET lets a local agent and a deployed mock seller checkout share order tokens. */
+function orderSecret(): string {
+  return process.env.MELIT_ORDER_SECRET || ledgerSecret();
+}
+
 function mac(payload: string, secret: string): string {
   return createHmac("sha256", `${secret}:order`).update(payload).digest("base64url");
 }
 
-export function signOrder(order: PaymentOrder, now = Date.now(), secret = ledgerSecret()): string {
+export function signOrder(order: PaymentOrder, now = Date.now(), secret = orderSecret()): string {
   const payload = Buffer.from(JSON.stringify({ ...order, exp: now + ORDER_TTL_MS })).toString("base64url");
   return `${payload}.${mac(payload, secret)}`;
 }
 
-export function verifyOrder(token: string | null | undefined, now = Date.now(), secret = ledgerSecret()): PaymentOrder | null {
+export function verifyOrder(token: string | null | undefined, now = Date.now(), secret = orderSecret()): PaymentOrder | null {
   if (!token) return null;
   const [payload, sig] = token.split(".");
   if (!payload || !sig) return null;
