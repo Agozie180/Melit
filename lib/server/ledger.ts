@@ -32,12 +32,17 @@ export const LedgerEntrySchema = z.object({
 
 export const LedgerSchema = z.array(LedgerEntrySchema).max(500);
 
+export class LedgerSecretError extends Error {}
+
 export function ledgerSecret(): string {
   if (process.env.MELIT_LEDGER_SECRET) return process.env.MELIT_LEDGER_SECRET;
   const apiKey = process.env.OPENSERV_API_KEY || process.env.SERV_API_KEY;
   if (apiKey) {
     // Derived so deployments only need OPENSERV_API_KEY; the key itself never leaves the server.
     return createHash("sha256").update(`melit-ledger-v1:${apiKey}`).digest("hex");
+  }
+  if (process.env.VERCEL) {
+    throw new LedgerSecretError("MELIT_LEDGER_SECRET or OPENSERV_API_KEY must be set on Vercel.");
   }
   return "melit-dev-insecure-ledger-secret";
 }

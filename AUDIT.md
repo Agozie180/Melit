@@ -22,29 +22,27 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 **Test.** There is no unit test for prose. The check is to read those three files against `decide` in `lib/negotiation/negotiator.ts` and `splitSavings` in `lib/money.ts`.
 
+### A3. Production SERV rounds fell back on HTTP 400 (max output tokens)
+
+**What was wrong.** With strict `json_schema` and no completion cap, OpenServ inferred ~130k `max_tokens` and returned HTTP 400. A later attempt used the wrong field (`max_tokens` instead of `max_completion_tokens` for `gpt-5.4-mini`).
+
+**Fix.** `lib/adapters/reasoning.ts` sends `max_completion_tokens: 2048` (override `SERV_MAX_COMPLETION_TOKENS`) and keeps strict `json_schema`. **Tests:** `tests/reasoning.test.ts`, `npm run verify:serv-payload`, `npm run verify:serv` with a key.
+
+**Live check (15 Nov 2026).** `POST /api/negotiate` on https://melit.vercel.app after saving a shopping list returned negotiation rounds with `"source":"serv"`.
+
 ## Open
 
-### B1. The public URL lagged `main`, then caught up
+### B1. The public URL matches `main` (shopping list + SERV)
 
-Before `main` moved to `7af69c8`, the HTML from https://melit.vercel.app contained no "Shopping list".
-
-After that fast-forward, Vercel production `dpl_3PaCYdWGiVNf7xi9AMUmi9yACEA9` was READY for that commit. A fetch of https://melit.vercel.app on 15 Nov 2026 contained "Shopping list". `GET /api/agent` on that host still reported reasoning configured, Reppo configured, payment mode `testnet`, scale `0.001`, wallet `0x14433179E3450A5a4D5A7e0a6E81627e4e6421a8`, `verified: false`, rails `direct-testnet` and `simulated`.
-
-**Status.** The shopping list is on the public URL as of that deploy. The card is still a testnet wallet, not Passport.
+Production https://melit.vercel.app on 15 Nov 2026 (deploy for `main` after the SERV fix) serves the shopping list UI, `reasoning.configured: true`, Reppo configured, testnet payments, identity **not** Passport-verified. **Preview** deploys may require Vercel Authentication unless a share link is used.
 
 ### B2. Rate limits do not survive a second serverless instance
 
-`lib/server/rate-limit.ts` keeps counts in a `Map` on the instance. `LIMITS` covers negotiate, feedback, overspend, and shopping-list. It does not include Reppo. `POST /api/reppo` uses a separate 20-second gap in `app/api/reppo/route.ts`, also in memory. `GET /api/reppo/[id]` does not validate the id with zod and does not use `checkRateLimit`. The rate-limit file comments that a Vercel Firewall rule is the cross-instance layer. A 24-request burst on 15 Nov 2026 did not trigger it, so that layer stays unverified.
+`lib/server/rate-limit.ts` keeps counts in a `Map` on the instance. `LIMITS` covers negotiate, feedback, overspend, shopping-list, and **reppo** (GET poll and POST submit). `POST /api/reppo` still has a per-deal dedupe and a 20-second gap per IP in `app/api/reppo/route.ts`. `GET /api/reppo/[id]` validates the id with zod. A shared store (e.g. Upstash Redis) is still not built. A Vercel Firewall rule is configured but a 24-request burst on 15 Nov 2026 did not trigger it — **unverified** as a cross-instance layer.
 
-**Smallest fix, not applied.** Add a `reppo` rule to `LIMITS`, parse the id with zod, and move the counters to a store shared across instances.
+### B3. The HMAC key had a public fallback on misconfigured deploys
 
-### B3. The HMAC key has a public fallback
-
-`ledgerSecret()` in `lib/server/ledger.ts` returns the literal `melit-dev-insecure-ledger-secret` when `MELIT_LEDGER_SECRET`, `OPENSERV_API_KEY`, and `SERV_API_KEY` are all unset. Anyone who can read the source can then forge a v3 signature.
-
-**Why it is not the live bug.** The live `/api/agent` response reported reasoning configured, which means an API key is set, and the secret is then a SHA-256 of that key. Forging still requires the key.
-
-**Smallest fix, not applied.** If `process.env.VERCEL` is set and the function would return the literal, refuse to sign and refuse to pay.
+**Fix.** `ledgerSecret()` in `lib/server/ledger.ts` throws on `VERCEL` when neither `MELIT_LEDGER_SECRET` nor `OPENSERV_API_KEY` / `SERV_API_KEY` is set, instead of returning `melit-dev-insecure-ledger-secret`. **Test:** `tests/ledger-secret.test.ts`.
 
 ### B4. "Try to overspend" can block on the list instead of the cap
 
@@ -60,9 +58,9 @@ After that fast-forward, Vercel production `dpl_3PaCYdWGiVNf7xi9AMUmi9yACEA9` wa
 
 In `applyGuardrails`, an omitted `shoppingList` is treated as "on list" (`shoppingList === undefined ? true : ...`). `authorizePurchase` still rejects a missing signed list, so this does not call the rail. A future caller that pays from `decide()` alone would not be safe.
 
-### B7. Tests had no workflow
+### B7. CI and build
 
-`.github/workflows/test.yml` now runs `npm ci` and `npm run test:coverage` on pushes to `main` and on pull requests. The first Actions run had not finished when this paragraph was written, so the tests badge may show "no status" until that run ends. Locally, on 15 Nov 2026, `npm ci` completed and `npm test` reported 87 passing tests. `npm run test:coverage` reported 46.32% lines across `lib/` and `app/`.
+`.github/workflows/test.yml` runs `npm ci`, `npm run test:coverage`, and `npm run build` (Next.js typecheck) on `main` and pull requests. Locally, on 15 Nov 2026 after the SERV fix, `npm test` reported 89 passing tests.
 
 ## Checked, and not a finding
 

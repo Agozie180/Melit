@@ -45,7 +45,7 @@ Design with these. Do not route around them.
 
 | Constraint | What was checked | Consequence in the code |
 | --- | --- | --- |
-| SERV Reasoning is an OpenAI-compatible chat completion | `lib/adapters/reasoning.ts` posts to `https://inference-api.openserv.ai/v1/chat/completions` with `reasoning_effort: "low"` and a strict JSON schema | No vendor SDK. A timeout is 25 seconds. Failure becomes a labelled fallback. |
+| SERV Reasoning is an OpenAI-compatible chat completion | `lib/adapters/reasoning.ts` posts with `reasoning_effort: "low"`, strict `json_schema`, and `max_completion_tokens: 2048` | No vendor SDK. A timeout is 25 seconds. Failure becomes a labelled fallback. |
 | Vercel cannot run `kpass` | The live `/api/agent` response on 15 Nov 2026 had `status: "testnet-wallet"` and rails `direct-testnet` and `simulated`. Passport was not in the rail list. | `kpassEnabled()` is `MELIT_KPASS === "1"`. Leave it unset on Vercel. |
 | Kite payments in this repo are testnet only | `lib/kite/config.ts` sets chain 2368, RPC `https://rpc-testnet.gokite.ai/`, explorer `https://testnet.kitescan.ai`, pieUSD `0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A`. The file says there is no mainnet configuration. | Do not add a mainnet key path. |
 | The public demo has no database | The ledger and the list are in `localStorage` and are sent back with each request | The server recomputes totals from signed rows. A deleted browser ledger is a new week. That is disclosed, not prevented. |
@@ -60,11 +60,11 @@ Cut from the bottom. P0 is the entry. P1 is still open and is listed in [AUDIT.m
 | --- | --- | --- |
 | P0 | List check, $300 check, HMAC on the rows the check reads, payment only after `allowed` | Built. Tests in `tests/spend-guard.test.ts`, `tests/shopping-list.test.ts`, `tests/payments.test.ts`. |
 | P0 | SERV call for each negotiation round, with a labelled fallback | Built. `decide` in `lib/negotiation/negotiator.ts`. |
-| P1 | The public URL serves this build, including the shopping list | Open on 15 Nov 2026. https://melit.vercel.app did not. |
-| P1 | A rate limit that holds across serverless instances, including Reppo | Open. Counters are in-process (`lib/server/rate-limit.ts`). |
-| P1 | Refuse the dev HMAC secret when `VERCEL` is set and no key is present | Open. `ledgerSecret()` falls back to a string in source. |
+| P1 | The public URL serves this build, including the shopping list | **Done** on https://melit.vercel.app (15 Nov 2026, post-SERV fix). |
+| P1 | A rate limit that holds across serverless instances, including Reppo | Partial. Reppo routes use `LIMITS`; counters are still in-process. Redis is not built. |
+| P1 | Refuse the dev HMAC secret when `VERCEL` is set and no key is present | **Done.** `ledgerSecret()` throws on Vercel without a configured secret. |
 | P2 | A server-side ledger so clearing the browser does not reset the week | Not built. Named as a known limitation. |
-| P2 | `applyGuardrails` treats a missing `shoppingList` as off-list | Not built. The payment gate still checks the signed list. The negotiator treats `shoppingList === undefined` as on-list so older callers keep working. |
+| P2 | `applyGuardrails` treats a missing `shoppingList` as off-list when list caps are in play | Partial. When `listMaxPriceCents` is set (live negotiate path), the item is treated as on-list; payment gate still authoritative. |
 
 ## Non-goals
 
@@ -81,11 +81,11 @@ Do not build these in this hackathon entry.
 
 These were resolved against the live platform before treating a claim as true.
 
-- `GET https://melit.vercel.app/api/agent` on 15 Nov 2026 returned reasoning configured (`gpt-5.4-mini`), Reppo configured, payment mode `testnet`, chain 2368, scale `0.001`, identity `0x14433179E3450A5a4D5A7e0a6E81627e4e6421a8`, `verified: false`.
-- The same day's HTML for `/` contained no "Shopping list".
+- `GET https://melit.vercel.app/api/agent` on 15 Nov 2026 (evening, post-SERV fix) returned reasoning configured, Reppo configured, testnet mode, scale `0.001`, wallet on chain 2368, `verified: false`.
+- The same evening, `/` included the shopping list UI and live `POST /api/negotiate` returned `"source":"serv"` on negotiation rounds when the list was saved.
 - The catalog JSON from that endpoint had no floor field.
 - `https://testnet.kitescan.ai/tx/0x64f1e93057bc9357f6f044ccaa6b736a8dfd67d53e1c3a9cf8aa156d6d2b83de` returned a transaction page. The success details are rendered by the explorer's client. On-chain success was not read out of that HTML.
-- Local `npm test` on 15 Nov 2026 reported 87 passing tests. A fresh `npm ci` on an empty machine was not run.
+- Local `npm test` on 15 Nov 2026 reported 89 passing tests; CI also runs `npm run build`.
 
 ## Demo and submission
 
@@ -105,7 +105,7 @@ Filled from the playbook's pre-submission list. A box is checked only where this
 **Verifiability**
 
 - [x] A hosted URL exists, and recorded testnet hashes exist in `data/recorded-receipts.json`.
-- [x] https://melit.vercel.app served `7af69c8` on 15 Nov 2026, and that HTML contained "Shopping list". A later commit is on the URL only after Vercel finishes that deploy.
+- [x] https://melit.vercel.app serves the shopping list and live SERV negotiation rounds as of the 15 Nov 2026 evening deploy (`main` after `max_completion_tokens` fix).
 - [x] The quantified spend claims in the README name the test command.
 - [ ] No published npm package. Melit is an app, not a library. Nothing to claim here.
 
