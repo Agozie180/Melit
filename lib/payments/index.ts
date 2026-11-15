@@ -1,7 +1,8 @@
 // SERVER-ONLY. Chooses the payment rails from the environment.
 //
 // MELIT_PAYMENT_MODE:
-//   testnet   -> Kite Passport sandbox (if MELIT_KPASS=1), then direct testnet transfer (if AGENT_PRIVATE_KEY)
+//   testnet   -> Kite Passport sandbox (if MELIT_KPASS=1), then direct testnet transfer (if AGENT_PRIVATE_KEY),
+//                then a labelled simulated receipt only if MELIT_SIMULATED_FALLBACK=1
 //   recorded  -> replay receipts from data/recorded-receipts.json, else simulated
 //   simulated -> simulated receipts only
 // Default: testnet when either testnet rail is configured, recorded on Vercel, simulated otherwise.
@@ -35,6 +36,7 @@ export function configuredRails(mode = paymentMode()): PaymentRail[] {
       const rails: PaymentRail[] = [];
       if (kpassEnabled()) rails.push(new KitePassportSandboxRail());
       if (directTestnetEnabled()) rails.push(new DirectTestnetRail());
+      if (process.env.MELIT_SIMULATED_FALLBACK === "1") rails.push(new SimulatedRail());
       return rails;
     }
     case "recorded":
