@@ -100,7 +100,7 @@ Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling f
 
 **Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week. The Reset demo button does exactly this on purpose. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so the $300 cap applies per browser ledger, not per wallet. A production version would persist the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
 
-**Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend` and `/api/reppo` are rate-limited per client IP and globally (`lib/server/rate-limit.ts`, e.g. 6 negotiations per minute and 40 per hour per IP). These counters live in each serverless instance. On the deployment, a Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those four routes, enforced at the edge across all instances) sits in front of them. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
+**Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend` and `/api/reppo` are rate-limited per client IP and globally (`lib/server/rate-limit.ts`, e.g. 6 negotiations per minute and 40 per hour per IP). These counters live in each serverless instance, and Vercel spreads one client's requests over several instances (visible in the `X-RateLimit-Remaining` header), so on the deployment they bound abuse per instance rather than exactly. A Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those routes) is also configured, but a 24-request burst test did not trigger it, so treat it as unverified. A shared counter (e.g. Upstash Redis) is the proper fix and is on the roadmap. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
 
 ## Payments on KiteAI testnet
 
@@ -241,6 +241,7 @@ Never put a mainnet key or a funded personal wallet in any env var. `AGENT_PRIVA
 
 - Get the mock seller host allowlisted as a Kite sandbox merchant, so Rail 1 pays first instead of hitting `sandbox_merchant_not_allowlisted`.
 - A server-side ledger, so the weekly cap survives a cleared browser.
+- A shared rate-limit store, so per-IP limits hold across serverless instances.
 - Real merchant integrations and multi-seller comparison.
 
 ## License
