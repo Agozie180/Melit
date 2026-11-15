@@ -6,8 +6,11 @@
 | --- | --- |
 | Live app | https://melit.vercel.app |
 | This branch | Deploy it before judging. On 15 Nov 2026 the live URL was an older build with no shopping list. |
-| Demo | [demo.mp4](./demo.mp4) · shot list [demo.md](./demo.md) |
+| Demo | [demo.md](./demo.md) is the 90-second script. [demo.mp4](./demo.mp4) is an older 1:55 cut and does not follow that script. |
 | Write-up | [SUBMISSION.md](./SUBMISSION.md) |
+| Judging brief | [JUDGING.md](./JUDGING.md) |
+| Blueprint | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| Self-audit | [AUDIT.md](./AUDIT.md) |
 | Reproduce the checks | `npm test` |
 
 > **The model may suggest a price. The server will not pay unless the item is on your signed list, quantity is left, the price is within that item's max, and the last 7 days plus this price is at most $300.**
@@ -35,7 +38,7 @@ deal price → authorizePurchase(list, ledger, price)
   → blocked: stop. The rail is not called.
 ```
 
-The file map is in [Architecture](#architecture).
+The invariants and the cut line are in [ARCHITECTURE.md](./ARCHITECTURE.md). The file map is below, under [Architecture](#architecture).
 
 ## What's used, and what's deliberately not
 
@@ -113,7 +116,7 @@ Authorization: Bearer $OPENSERV_API_KEY
 }
 ```
 
-- **Every negotiation decision** is a SERV call (prompt `melit-negotiator-v3`). The model receives the item, list price, market reference price, the current ask, the negotiation history, the remaining weekly budget, your max price, your priority ("save more" or "buy fast"), and the shopping list with each row's max price and quantity remaining. It also sees seller bundles and flash deals, and is told to refuse any that are not on the list. It never receives the seller's hidden floor price.
+- **Each negotiation round asks SERV first** (prompt `melit-negotiator-v3`). The model receives the item, list price, market reference price, the current ask, the negotiation history, the remaining weekly budget, your max price, your priority ("save more" or "buy fast"), and the shopping list with each row's max price and quantity remaining. It also sees seller bundles and flash deals, and is told to refuse any that are not on the list. It never receives the seller's hidden floor price. A round that does not get a valid SERV reply is the labelled fallback in the next bullet, not a silent SERV call.
 - It must return strict JSON: `{ "action": "offer" | "accept" | "walk", "offerPrice": number, "reasoning": string[], "confidence": number }`.
 - Output is validated with **zod**. If the call fails, times out, refuses, or returns JSON that doesn't validate, a simple heuristic takes that round and the UI labels it **Fallback heuristic** together with the reason.
 - Following SERV's "Day One" guidance, the model does the judgment and code does the arithmetic and hard limits. Ceilings and gaps are pre-computed in the prompt, and after the model decides, code guardrails clamp offers to the shopping-list maximum, your max price and the remaining budget, and walk away if the item is off the list or the quantity is used up. Any adjustment is shown in the reasoning trail. The payment itself is checked again by the Spend Guard, which does not trust the model's answer.
@@ -125,7 +128,7 @@ app/
   page.tsx                  Dashboard (client): agent card, budget gauge, vault, shopping list, form, feed, ledger
   api/agent/route.ts        GET  identity, reasoning status, public catalog
   api/negotiate/route.ts    POST stream (NDJSON) of negotiation rounds, deal, guard result, receipt
-  api/overspend/route.ts    POST demo: try to buy something that doesn't fit the weekly budget
+  api/overspend/route.ts    POST demo: try a purchase the guard should block (list, or the weekly cap)
   api/shopping-list/route.ts
                             POST the owner's list; the response is the signed allowlist
   api/sellers/[sellerId]/checkout/route.ts
@@ -189,7 +192,7 @@ Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling f
 
 **Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week, which also restores shopping-list quantities. The Reset demo button does exactly this on purpose. It does not clear the shopping list. Saving a new list is the owner's approval, so anyone who can use the demo as you can also save a wider list. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so both controls apply per browser, not per wallet. A production version would persist the list and the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
 
-**Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend` and `/api/reppo` are rate-limited per client IP and globally (`lib/server/rate-limit.ts`, e.g. 6 negotiations per minute and 40 per hour per IP). These counters live in each serverless instance, and Vercel spreads one client's requests over several instances (visible in the `X-RateLimit-Remaining` header), so on the deployment they bound abuse per instance rather than exactly. A Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those routes) is also configured, but a 24-request burst test did not trigger it, so treat it as unverified. A shared counter (e.g. Upstash Redis) is the proper fix and is on the roadmap. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
+**Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), and `/api/overspend` use `lib/server/rate-limit.ts` (for example 6 negotiations per minute and 40 per hour per IP). `POST /api/reppo` is not in that map. It has its own in-memory 20-second gap per IP in `app/api/reppo/route.ts`. `GET /api/reppo/[id]` has neither. These counters live in each serverless instance, and Vercel spreads one client's requests over several instances (visible in the `X-RateLimit-Remaining` header on the shared limiter), so on the deployment they bound abuse per instance rather than exactly. A Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those routes) is also configured, but a 24-request burst test did not trigger it, so treat it as unverified. A shared counter (e.g. Upstash Redis) is the proper fix and is on the roadmap. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
 
 ## Payments on KiteAI testnet
 

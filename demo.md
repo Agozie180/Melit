@@ -1,89 +1,82 @@
-# Melit — 2-minute demo
+# Melit — 90-second demo
 
-Hackathon submission video for **SERV Hackathon Edition 02** (Kite track, Reppo track). This cut includes the signed shopping list: Melit can buy only what the owner added and approved.
+The script a presenter reads. It leads with the refusal, because that is the moment a judge cannot fake by watching a happy path.
 
-- **Who it's for:** people who don't haggle and don't save. Spoken in the first 15 seconds.
-- **Where:** a fresh browser on the preview of this branch. The ledger starts empty. Nothing is pre-filled.
-- **Voice:** soft male, unhurried. Narration below is the exact read.
-- **Honest on camera:** sellers are labelled mocks. An empty list is refused in server code before any negotiation. The owner adds the earbuds at $129 and the running shoes (quantity 2) and the server signs the list. A seller flash deal that is not on the list stays declined until **Approve and save**. Payments are real pieUSD on KiteAI testnet (chain 2368). Identity is the testnet wallet, not Passport-verified. When SERV walks on a sticker price that is still above the learned walk-away limit, code turns that walk into an offer under the limit and the trail says so. Reppo judges in the background; the wait itself is cut, and the verdict is shown when it lands.
+Use a deploy of this branch. The public URL on 15 Nov 2026 did not contain the shopping list. Say what is simulated out loud. Do not promise a KiteScan link, a Passport checkmark, or a Reppo score unless that thing is on the screen.
 
-## Shot list
+## Setup, before the clock
 
-### 1. Introduction (0:00–0:13)
+- Fresh browser. Empty ledger. Do not pre-save a list.
+- If the banner says the API key is missing, every round will be **Fallback heuristic**. Say that in act 3.
+- If the agent card says **Testnet wallet, not Passport-verified**, that is the truth of the public deploy. `kpass` does not run on Vercel.
+- If payments read **simulated, no money moves**, no chain transaction will appear.
 
-The name, the one-line promise, the weekly budget at $0 of $300, then the shopping list.
+## Act 1 — The refusal (0:00–0:20)
 
-> Most of us pay the sticker price, and we never haggle. Meet Melit: a shopping agent for people who don't know how to negotiate, or how to save. It can only buy what's on your list, and it never breaks your weekly budget.
+Do not add anything. Press **Wireless Earbuds**, then **Negotiate and buy**.
 
-### 2. Empty list (0:13–0:24)
+The feed refuses: there is no approved shopping list. No negotiation round starts. No payment rail is called.
 
-Pick **Wireless Earbuds**. The request says it is not on the list. Press **Negotiate and buy**. The feed refuses: there is no approved shopping list yet.
+> Melit haggles, then the server decides whether it may pay. The list is empty, so I ask for the earbuds anyway. It declines. It does not negotiate, and it does not pay.
 
-> The list is empty, so I ask for the earbuds anyway. Melit declines. It will not negotiate, and it will not pay, until I add them and approve.
+## Act 2 — The owner signs the list (0:20–0:40)
 
-### 3. The signed list (0:24–0:32)
+Add Wireless Earbuds, max $120, quantity 1. Press **Save list**. The badge turns **signed**. The row says **waiting**.
 
-Add Wireless Earbuds at $129, quantity 1, and Running Shoes at $140, quantity 2. **Save list**. The badge turns **signed**. Both rows say **waiting**.
+> I set the max at a hundred and twenty dollars, quantity one, and I save. The server signs that list. That signature is the approval. The row is waiting.
 
-> I approve the earbuds at a hundred and twenty-nine dollars, and I add the running shoes too. The server signs the list. Both are waiting.
+## Act 3 — One purchase, and a push that stays declined (0:40–1:05)
 
-### 4. Negotiate, and refuse the extra (0:32–0:49)
+Press **Negotiate and buy** on the earbuds. Open one trail and read the badge.
 
-Negotiate the earbuds. The seller pushes a Bluetooth Speaker flash deal. It is logged **declined: not on your list**, then **Add to list?** and **Approve and save** put it on the list. The earbuds themselves are negotiated with SERV Reasoning.
+- **SERV Reasoning** means that round called SERV.
+- **Fallback heuristic** means it did not. Say so. Do not say every move is a SERV call.
 
-> Now it can negotiate. Every move is a SERV Reasoning call. The seller pushes a speaker that is not on the list, and Melit refuses it until I approve.
+A Bluetooth Speaker flash deal should log `declined: not on your list`, with **Add to list?**. Do not press **Approve and save**. The speaker stays off the list.
 
-The line above is what the cut says. The badge on screen is the check: **SERV Reasoning** means that round called SERV, **Fallback heuristic** means it did not. A round with the fallback badge makes "every move" too strong.
+The earbuds row should turn **bought** and show the dollars saved. The vault splits that saving 85/15. That split is list price minus paid price. It is not a charge. Open a transaction link only if the receipt has one.
 
-### 5. Guard, payment, bought (0:49–1:03)
+> It can negotiate now. This badge says whether SERV actually answered. The seller pushes a speaker that is not on the list. Melit logs the decline and does not pay. I do not approve it. The vault line is arithmetic, not a fee collected.
 
-The green receipt: Spend Guard approved, direct testnet transfer, pieUSD amount, KiteScan link. The vault shows yours at 85%. The earbuds row turns **bought**.
+## Act 4 — The second block (1:05–1:30)
 
-> The earbuds close below list. The Spend Guard approves the exact amount, then Melit pays in pieUSD on KiteAI testnet. Eighty-five percent of the savings is yours, and the list marks them bought.
+Press **Try to overspend**.
 
-### 6. It learns (1:03–1:12)
+With only the earbuds on the list, and money still left in the week, the block you see is the list: the chair is not approved. Say that. Do not call it the weekly cap.
 
-Thumbs down, note "you paid too much", send. Hold on **What Melit learned**.
+To put the $300 sentence on screen: add Espresso Machine Pro, max $349, quantity 1, save, and press **Try to overspend** again. The guard should block $349.00 as over the $300 week. The card says no payment was attempted.
 
-> Thumbs down: you paid too much. SERV turns that note into a small, capped change, so next time Melit pushes harder.
+> That one is not on the list, so the list stops it. To show the week: I approve the espresso at three hundred and forty-nine, which is over the cap. The guard blocks it, and no payment is attempted.
 
-### 7. Shoes, already on the list (1:12–1:25)
+Stop. Do not wait on camera for a Reppo verdict. If a score is already on screen, read it. If it is not, do not invent one.
 
-**Running Shoes** from the seller who bluffs. A rain-jacket flash deal is declined and left off the list. The shoes close, and the payment is another real testnet transfer.
+## Lines that are not in this script
 
-> Next, the running shoes, already on the list, from a seller who bluffs that every price is his last. The new strategy rides along.
+- "Every move is a SERV Reasoning call."
+- "This payment is real pieUSD" unless the receipt on screen is a testnet receipt with a hash.
+- "Reppo scored this purchase" unless the verdict is visible.
+- "Melit earns 15%." The vault shows 15% of the saving. Nothing is collected.
 
-### 8. The key moment (1:25–1:34)
+## Appendix — `demo.mp4` is a different cut
 
-**Try to overspend**. The second pair of shoes is still allowed by the list, and the red card says it would break the $300 weekly limit. No payment is attempted.
+`demo.mp4` is a 1:55, 1920×1080, 30 fps recording. It is not this 90-second script. A judge who watches the file is not watching the acts above in this order.
 
-> Now the key moment. This one does not fit what's left of the three hundred dollars. The Spend Guard blocks it, and no payment is attempted.
+What that file actually contains:
 
-### 9. The verdict (1:34–1:44)
+| Shot in the file | In | Out | What the picture is |
+| --- | --- | --- | --- |
+| Introduction | 0:00 | 0:13 | Name, weekly budget, shopping list |
+| Empty list | 0:13 | 0:24 | Earbuds declined before a list exists |
+| Signed list | 0:24 | 0:32 | Earbuds at $129 and running shoes, quantity 2, badge **signed** |
+| Negotiate, refuse the extra | 0:32 | 0:49 | Speaker flash deal, then **Approve and save** puts it on the list |
+| Guard, payment, bought | 0:49 | 1:03 | A testnet receipt and the vault |
+| It learns | 1:03 | 1:12 | Thumbs down, "you paid too much" |
+| Shoes | 1:12 | 1:25 | Running shoes, a rain-jacket push left declined |
+| Weekly cap | 1:25 | 1:34 | **Try to overspend** on a second pair of shoes |
+| Reppo verdict | 1:34 | 1:44 | A verdict card. The wait is not in the cut |
+| Close | 1:44 | 1:55 | Closing card |
 
-The wait is not shown. Cut to the Reppo verdict, open **Why Reppo said that**.
+Two spoken lines in that file are stronger than the code guarantees:
 
-> About a minute later, Reppo's verdict is in: a score, a route, and the models behind it. Melit learns from that, and tracks whether it is getting better.
-
-### 10. Close (1:44–1:55)
-
-**Is Melit getting better?** The card holds after the last line, then fades.
-
-> Melit only earns when it saves you money. Built on SERV Reasoning, paying on KiteAI, judged by Reppo.
-
-## Cut timings
-
-Locked to `demo.mp4` (1:55, 1920×1080, 30 fps). The wait for Reppo is not in the cut. The closing card holds after the last line.
-
-| Shot | In | Out |
-| --- | --- | --- |
-| Introduction | 0:00 | 0:13 |
-| Empty list | 0:13 | 0:24 |
-| Signed list | 0:24 | 0:32 |
-| Negotiate, refuse the extra | 0:32 | 0:49 |
-| Guard, payment, bought | 0:49 | 1:03 |
-| It learns | 1:03 | 1:12 |
-| Shoes | 1:12 | 1:25 |
-| Weekly cap | 1:25 | 1:34 |
-| Reppo verdict | 1:34 | 1:44 |
-| Close | 1:44 | 1:55 |
+- Around 0:32 the narration says every move is a SERV Reasoning call. The badge on screen is the check. **Fallback heuristic** means that round did not call SERV.
+- Around 1:25 the narration treats the overspend block as the weekly cap on a second pair of shoes. That is what that recording shows. `runOverspend` can instead block an off-list chair when remaining budget still covers every on-list price. Act 4 of this script says which one you are looking at.

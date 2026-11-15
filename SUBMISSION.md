@@ -4,6 +4,8 @@
 
 **Repo:** https://github.com/Agozie180/Melit · **Judge's sheet:** [README.md](./README.md) (thesis, what is used, what is measured, limitations)
 
+**Also:** [JUDGING.md](./JUDGING.md) (the brief, quoted), [ARCHITECTURE.md](./ARCHITECTURE.md) (the blueprint), [AUDIT.md](./AUDIT.md) (findings), [demo.md](./demo.md) (the 90-second script).
+
 **Demo:** deploy this branch before judging. On 15 Nov 2026, https://melit.vercel.app was an older build. Its page had no shopping list. The preview for this branch was behind Vercel SSO, so this audit did not click through it.
 
 ## Write-up
@@ -16,7 +18,7 @@ Sellers are mocks. A testnet key pays real pieUSD on KiteAI testnet (chain 2368,
 
 ## 2-minute demo script
 
-Use a deploy of this branch. Say what is simulated out loud.
+The 90-second version starts with the empty-list refusal and is the one to read if time is short: [demo.md](./demo.md). This longer pass adds the feedback beat. Use a deploy of this branch. Say what is simulated out loud.
 
 **0:00.** "Melit haggles, then two server checks run before any payment: a shopping list, and a $300 week."
 
