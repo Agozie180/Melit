@@ -10,10 +10,10 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { centsToTestnetUnits, formatTestnetAmount, KITE_TESTNET } from "@/lib/kite/config";
 import { verifyOrder } from "@/lib/payments/order-token";
-import { mockSellerPayTo } from "@/lib/payments/testnet-rail";
+import { mockSellerPayTo, X402_FACILITATOR_URL } from "@/lib/payments/testnet-rail";
 import { SELLERS } from "@/lib/market/catalog";
 
-const FACILITATOR_URL = process.env.X402_FACILITATOR_URL || "https://facilitator.pieverse.io/v2";
+const FACILITATOR_URL = X402_FACILITATOR_URL;
 
 const resourceServer = new x402ResourceServer(new HTTPFacilitatorClient({ url: FACILITATOR_URL })).register(
   KITE_TESTNET.caip2,
