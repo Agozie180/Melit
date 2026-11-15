@@ -53,7 +53,8 @@ export function ReppoTrackCard({
       </CardTitle>
       <p className="mb-3 text-xs text-neutral-600">
         Every purchase is judged asynchronously by Reppo&apos;s evaluator panel. Purchases never wait on this queue. Status labels follow Reppo&apos;s API
-        (QUEUED → PROCESSING → COMPLETED/FAILED). Completed jobs link to the evaluation on eval.reppo.xyz for verification.
+        (QUEUED → PROCESSING → COMPLETED/FAILED). The queue runs in the browser (localStorage), not on the server. Completed jobs link to eval.reppo.xyz for
+        verification.
       </p>
       <div className="mb-3 flex flex-wrap gap-2">
         {(["queued", "pending", "verdict", "failed"] as const).map((s) => (
