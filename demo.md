@@ -57,7 +57,7 @@ The wait itself is not shown. Cut to the returned Reppo verdict, open "Why Reppo
 
 > About a minute later, Reppo's verdict arrives: a score, a route, and the evaluator models behind it. Melit learns from that as well, and tracks whether it's actually getting better.
 
-### 9. Close (1:51–1:59)
+### 9. Close (1:51–2:02)
 
 **Is Melit getting better?** — the before/after from this session only.
 
@@ -65,7 +65,7 @@ The wait itself is not shown. Cut to the returned Reppo verdict, open "Why Reppo
 
 ## Cut timings
 
-Locked to `demo.mp4` (1:59, 1920×1080, 30 fps). The minute spent waiting on Reppo is not in the cut; the narration says it took about a minute, which it did.
+Locked to `demo.mp4` (2:02, 1920×1080, 30 fps). The minute spent waiting on Reppo is not in the cut; the narration says it took about a minute, which it did. The closing card holds after the last line.
 
 | Shot | In | Out |
 | --- | --- | --- |
@@ -77,4 +77,4 @@ Locked to `demo.mp4` (1:59, 1920×1080, 30 fps). The minute spent waiting on Rep
 | Second purchase | 1:16 | 1:29 |
 | The key moment | 1:29 | 1:39 |
 | The verdict | 1:39 | 1:51 |
-| Close | 1:51 | 1:59 |
+| Close | 1:51 | 2:02 |
