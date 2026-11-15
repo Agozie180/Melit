@@ -12,11 +12,12 @@ Most people pay the list price. They don't negotiate because it's awkward, and t
 
 ## What Melit does
 
-1. **Verified agent identity.** A Melit Agent ID card shows the agent's identifier, spending limit and status. In this build it is labelled *Simulated (Kite Passport-ready)*.
+1. **Agent identity.** The Melit Agent ID card shows the agent's identifier, spending limit and status. It says **Passport sandbox** only when `kpass` confirms a registered sandbox agent at that moment. Otherwise it shows the agent's KiteAI testnet wallet ("not Passport-verified") or a labelled simulated ID.
 2. **Negotiates before it buys.** Each round, SERV Reasoning decides whether to offer, accept or walk away, and returns the reasoning steps, which are shown in the UI.
 3. **Buys only good deals.** The deal must be at or under your max price and pass the Spend Guard.
 4. **Saves the difference.** `saved = list price - paid price` goes into the Savings Vault.
 5. **Hard weekly cap.** The Spend Guard blocks any payment that would push the last 7 days over $300, with a plain-English reason.
+6. **Pays on KiteAI testnet.** Approved purchases are paid in pieUSD on KiteAI testnet (chain 2368). It tries the Kite Passport sandbox first and falls back to a direct testnet transfer. Each ledger row records the rail that paid and links the transaction on KiteScan.
 
 ## How SERV Reasoning is used
 
@@ -46,6 +47,8 @@ app/
   api/agent/route.ts        GET  identity, reasoning status, public catalog
   api/negotiate/route.ts    POST stream (NDJSON) of negotiation rounds, deal, guard result, receipt
   api/overspend/route.ts    POST demo: try to buy something that doesn't fit the weekly budget
+  api/sellers/[sellerId]/checkout/route.ts
+                            Mock seller x402 checkout (@x402/next, exact scheme, pieUSD on eip155:2368)
 lib/
   market/catalog.ts         4 mock sellers, 11 items, hidden floor prices (server-only)
   market/seller.ts          Deterministic seller rules (no LLM): accept at floor, shrinking counters, walk after 4 rounds
@@ -54,12 +57,18 @@ lib/
   guard/spend-guard.ts      The pure Spend Guard function
   server/ledger.ts          Ledger verification (HMAC) + authorizeSpend()
   adapters/reasoning.ts     ReasoningAdapter  -> SERV Reasoning
-  adapters/identity.ts      IdentityAdapter   -> simulated, Kite Passport-ready
-  adapters/payments.ts      PaymentAdapter    -> simulated, x402/Kite-ready
-tests/                      vitest: spend guard, ledger tampering, sellers, negotiator, end to end
+  adapters/identity.ts      Identity: Passport sandbox (confirmed via kpass) > testnet wallet > simulated
+  kite/config.ts            KiteAI testnet constants (chain 2368, pieUSD, KiteScan) and the testnet scale
+  payments/router.ts        Tries rails in order with explicit no-fallback cases
+  payments/kpass-rail.ts    Rail 1: `kpass session execute` as a child process (argv array, no shell)
+  payments/testnet-rail.ts  Rail 2: viem ERC-20 pieUSD transfer from AGENT_PRIVATE_KEY
+  payments/offline-rails.ts Recorded-receipt replay and simulated receipts (both move no money)
+  payments/order-token.ts   Signed orders: the seller checkout only charges Guard-approved orders
+scripts/kite-setup.mjs      Guided `kpass` sandbox setup (login check, faucet, agent, 7-day session)
+tests/                      vitest: spend guard, ledger tampering, sellers, negotiator, payment rails
 ```
 
-The three integrations sit behind adapter interfaces (`reasoning`, `identity`, `payments`) so a real Kite Passport or x402 implementation can be swapped in without touching the negotiation or guard logic.
+Reasoning, identity and payments each sit behind an interface, so they can be swapped without touching the negotiation or guard logic.
 
 **No database.** The ledger lives in the browser's localStorage and is sent with every request. The server never trusts a client total. It recomputes the weekly sum from the entries on every spend.
 
@@ -77,17 +86,42 @@ Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling f
 
 **Known limitation (honest):** without server-side storage, a user can delete their own localStorage ledger and start a fresh week. That only "attacks" their own budget, and the Reset demo button does exactly this on purpose. A production version would persist the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
 
+## Payments on KiteAI testnet
+
+Everything runs on **KiteAI testnet** (chain ID 2368, RPC `https://rpc-testnet.gokite.ai/`, explorer `https://testnet.kitescan.ai`) using free **pieUSD** test tokens. There is no mainnet configuration in the code. Amounts are scaled down so a faucet drip covers a whole week: by default $1.00 of price = 0.01 pieUSD, so the $300 weekly cap is 3 pieUSD on chain (`MELIT_TESTNET_SCALE`).
+
+The order of checks for every purchase:
+
+1. **Spend Guard first.** It must approve the exact amount, or nothing else runs (`lib/negotiation/run.ts`).
+2. **Rail 1: Kite Passport sandbox.** The server runs `kpass sandbox status`, and refuses to continue unless kpass confirms sandbox mode. It then runs `kpass session execute --method GET --url <mock seller checkout> --idempotency-key <order id>` as a child process with an explicit argument list (no shell). The mock seller's checkout is a real x402 endpoint built with `@x402/next`: it answers HTTP 402 with exact-scheme pieUSD requirements on `eip155:2368` and settles through the Pieverse facilitator. It only charges orders signed by Melit after Guard approval. The approved Passport session (3 pieUSD over 7 days) is a **second** limit layer.
+3. **Rail 2: direct testnet transfer.** If Rail 1 fails (not logged in, not sandbox, `host_not_in_executable_catalog`, unreachable seller, and so on), Melit sends an ERC-20 pieUSD transfer from `AGENT_PRIVATE_KEY` with viem. It confirms the RPC reports chain 2368 before sending and waits for the receipt.
+
+Two deliberate exceptions to "fall back for any reason":
+
+- If the Passport session refuses the payment (`session_total_exceeded`, `payment_cap_exceeded` and similar), Melit does **not** fall back. Routing around the session cap would defeat the second limit layer.
+- If the Passport outcome is unknown (exit code 7, `payment_outcome_pending`), Melit does **not** fall back either, because the first payment may still land and falling back could pay twice.
+
+If every rail fails, the purchase fails, the feed shows each rail's error, and no ledger entry is written.
+
+Each ledger entry stores the rail that paid, the tx hash and a KiteScan link, and all of these are covered by the server's HMAC signature.
+
+**Why a public seller URL:** with `kpass session execute`, the Passport *backend* calls the seller URL and settles the payment, so the mock seller checkout must be reachable from the internet (`SELLER_BASE_URL`, for example your Vercel deploy). A `localhost` seller can't be paid through Rail 1, so those payments use Rail 2.
+
+**Demo video vs deployed site:** kpass needs a local terminal and a passkey, so record real payments from a local server. The deployed Vercel site can't run kpass. With `MELIT_PAYMENT_MODE=recorded` it replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
+
 ## What's simulated vs real
 
 | Part | Status |
 | --- | --- |
 | SERV Reasoning negotiation decisions | **Real** when `OPENSERV_API_KEY` is set. Rounds that use the fallback are labelled. |
 | Spend Guard and ledger signing | **Real**, enforced in server code, unit tested. |
-| Sellers and marketplace | **Mock**: four labelled test sellers with deterministic rules. |
-| Agent identity (Kite Passport) | **Simulated**, shown as "Simulated (Kite Passport-ready)". Kite Passport needs the `kpass` CLI, a user passkey and a funded USDC wallet to approve a spending session, which doesn't fit a stateless demo. |
-| Payments (x402 on Kite) | **Simulated**. Receipts are `sim_…` ids, with no transaction hash and no money moved. Real x402 needs a seller endpoint that returns HTTP 402, an EIP-3009 signature and a facilitator. The mock sellers have no wallets. |
+| Sellers and marketplace | **Mock sellers**: four labelled sellers with deterministic rules. Only their checkout endpoint is real x402. |
+| Agent identity | **Kite Passport sandbox** only when kpass confirms it live. Otherwise **testnet wallet** (a real key, not Passport-verified) or **Simulated**. |
+| Payments, Rail 1 | **Real testnet** payments through the Kite Passport sandbox when you've logged in, approved a session and set `SELLER_BASE_URL`. |
+| Payments, Rail 2 | **Real testnet** pieUSD transfers when `AGENT_PRIVATE_KEY` holds testnet KITE (gas) and pieUSD. |
+| Recorded / simulated receipts | **No money moves.** Shown as "Recorded receipt (replay)" or "Simulated payment". |
 
-The UI never shows a simulated identity or payment as real.
+The UI never shows a simulated or recorded payment as a new real payment, and never claims Passport verification that kpass didn't confirm.
 
 ## Revenue model
 
@@ -98,27 +132,32 @@ Why this works: the incentive is aligned (Melit only wins when you do), there's 
 ## Setup
 
 ```bash
-git clone <this repo> melit && cd melit
+git clone https://github.com/Agozie180/Melit melit && cd melit
 npm install
-cp .env.example .env.local     # then set OPENSERV_API_KEY (from https://console.openserv.ai/)
+cp .env.example .env.local     # set OPENSERV_API_KEY (from https://console.openserv.ai/)
 npm run dev                    # http://localhost:3000
-npm test                       # Spend Guard + negotiation tests
+npm test                       # Spend Guard, negotiation and payment-rail tests
 ```
 
-Without a key the app still runs, but every round is labelled **Fallback heuristic** and a banner says SERV isn't configured.
+Without a key the app still runs, but every round is labelled **Fallback heuristic** and a banner says SERV isn't configured. With no payment rail configured, payments are **simulated** and labelled that way.
+
+### Testnet payments (local)
+
+1. **Rail 2 (quickest).** Create a throwaway wallet that you'll only use on testnet. Get KITE for gas from https://faucet.gokite.ai and some pieUSD, then set `AGENT_PRIVATE_KEY` and `MOCK_SELLER_PAYTO` in `.env.local`.
+2. **Rail 1 (Kite Passport sandbox).** Install the CLI (`curl -fsSL https://cli.gokite.ai/install.sh | bash`) and run `kpass login`. Then run `npm run kite:setup`, which switches on sandbox mode, requests faucet pieUSD, registers the agent and creates the 7-day "Melit weekly budget" session. Approve the printed URL with your passkey. Then set `MELIT_KPASS=1`, `KPASS_SESSION_ID` and `SELLER_BASE_URL` (a public deploy of this app).
+3. Optionally set `MELIT_RECORD_RECEIPTS=1` to save real receipts to `data/recorded-receipts.json` for the deployed replay.
 
 ### Deploy to Vercel
 
-1. Push this repo to GitHub and import it in Vercel (framework preset: Next.js).
-2. Add the environment variable `OPENSERV_API_KEY`. Nothing else is required.
+1. Import the repo in Vercel (framework preset: Next.js).
+2. Set `OPENSERV_API_KEY`. On Vercel the payment mode defaults to `recorded`: it replays committed receipts, or falls back to simulated receipts if there are none. Set `MOCK_SELLER_PAYTO` too if Rail 1 should be able to pay this deploy's seller checkout.
 3. Deploy. The negotiation route streams its response and allows up to 120 s per request.
 
-Optional env vars: `SERV_MODEL` (default `gpt-5.4-mini`) and `MELIT_LEDGER_SECRET` (defaults to a value derived from the API key).
+Never put a mainnet key or a funded personal wallet in any env var. `AGENT_PRIVATE_KEY` is for a throwaway testnet wallet only.
 
 ## Roadmap
 
-- `KitePassportIdentityAdapter`: read the agent's Passport and the user-approved spending session, and show "Verified".
-- `KiteX402PaymentAdapter`: pay x402 endpoints through the approved session (USDC.e on Kite mainnet, pieUSD on testnet).
+- Get the mock seller listed in the Kite catalog so Rail 1 never hits `host_not_in_executable_catalog`.
 - A server-side ledger, so the weekly cap survives a cleared browser.
 - Real merchant integrations and multi-seller comparison.
 
