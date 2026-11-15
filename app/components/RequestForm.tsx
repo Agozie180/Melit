@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { Priority, PublicItem, ShoppingRequest } from "@/lib/types";
 import { dollarsToCents, formatUsd } from "@/lib/money";
+import { findListItem, itemStatus, type ShoppingListItem } from "@/lib/shopping/list";
 import { Card, CardTitle } from "./ui";
 
 const PERSONALITY_LABEL: Record<PublicItem["personality"], string> = {
@@ -14,11 +15,15 @@ const PERSONALITY_LABEL: Record<PublicItem["personality"], string> = {
 
 export function RequestForm({
   catalog,
+  list,
+  ledger,
   busy,
   onSubmit,
   defaultPriority = "save",
 }: {
   catalog: PublicItem[];
+  list: ShoppingListItem[];
+  ledger: { itemName: string; savedCents: number }[];
   busy: boolean;
   onSubmit: (req: ShoppingRequest) => void;
   defaultPriority?: Priority;
@@ -45,6 +50,8 @@ export function RequestForm({
   }
 
   const shoppable = catalog.filter((i) => i.listPriceCents <= 300_00);
+  const match = query.trim() ? findListItem(list, query) : undefined;
+  const matchStatus = match ? itemStatus(match, ledger) : null;
 
   return (
     <Card>
@@ -65,6 +72,15 @@ export function RequestForm({
             ))}
           </datalist>
         </label>
+        {query.trim() && !match && (
+          <p className="text-xs text-amber-800">Not on your list. Melit will decline this until you add it and save.</p>
+        )}
+        {match && matchStatus && (
+          <p className="text-xs text-neutral-600">
+            On your list · max {formatUsd(match.maxPrice)} · {matchStatus.remaining} left
+            {match.maxPrice < dollarsToCents(Number(maxPrice) || 0) ? ". This request's max is higher, and the list max wins." : ""}
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="text-sm font-medium">Max price ($)</span>

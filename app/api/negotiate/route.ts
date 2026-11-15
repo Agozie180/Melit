@@ -14,6 +14,7 @@ const BodySchema = z.object({
     priority: z.enum(["save", "fast"]),
   }),
   ledger: z.unknown(),
+  list: z.unknown().optional(),
   profile: z.unknown().optional(),
   reviews: z.unknown().optional(),
 });
@@ -25,10 +26,10 @@ export async function POST(req: Request) {
   if (!body.success) {
     return Response.json({ error: "Invalid request: give an item, a max price and a priority." }, { status: 400 });
   }
-  const { request, ledger, profile, reviews } = body.data;
+  const { request, ledger, list, profile, reviews } = body.data;
   return withRemaining(
     ndjsonResponse(
-      runShopping(request, ledger, getReasoningAdapter(), undefined, { profile: parseProfile(profile), reviews }),
+      runShopping(request, ledger, getReasoningAdapter(), undefined, { profile: parseProfile(profile), reviews }, list),
     ),
     remaining,
   );

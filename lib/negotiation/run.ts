@@ -3,11 +3,14 @@
 
 import { randomUUID } from "node:crypto";
 import type { FeedEvent, LedgerEntry, PublicItem, ShoppingRequest } from "../types";
-import { formatUsd } from "../money";
+import { centsToDollars, formatUsd } from "../money";
 import { CATALOG, findItem, getCatalogItem, toPublicItem, type CatalogItem } from "../market/catalog";
+import { sellerPushes } from "../market/offers";
 import { MAX_ROUNDS, sellerRespond } from "../market/seller";
 import { checkSpend } from "../guard/spend-guard";
-import { authorizeSpend, signEntry, verifyLedger } from "../server/ledger";
+import { signEntry, verifyLedger } from "../server/ledger";
+import { authorizePurchase, verifyShoppingList } from "../server/shopping-list";
+import { declineOffer, findListItem, unitsBought } from "../shopping/list";
 import { getPaymentRouter } from "../payments";
 import { recordReceipt } from "../payments/offline-rails";
 import { PaymentFailedError, type PaymentOrder, type PaymentReceipt } from "../payments/types";
@@ -42,6 +45,7 @@ export async function* runShopping(
   reasoner: ReasoningAdapter,
   deps: PurchaseDeps = defaultDeps(),
   learning: LearningInput = {},
+  rawList: unknown = undefined,
 ): AsyncGenerator<FeedEvent> {
   const catalogItem = findItem(request.query);
   if (!catalogItem) {
@@ -55,11 +59,72 @@ export async function* runShopping(
     yield { type: "error", message: ledgerCheck.reason };
     return;
   }
+  const listCheck = verifyShoppingList(rawList);
+  if (!listCheck.ok) {
+    yield { type: "error", message: listCheck.reason };
+    return;
+  }
+  const list = listCheck.items;
+  const bought = unitsBought(ledgerCheck.entries, item.name);
+  const row = findListItem(list, item.name);
+  const pushes = sellerPushes(catalogItem);
   const remaining = checkSpend({ ledger: ledgerCheck.entries, attemptedCents: 1, now: Date.now() }).remainingCents;
   const profile = parseProfile(learning.profile ?? DEFAULT_PROFILE);
   const reputation = reputationFor(verifiedReviews(learning.reviews), catalogItem.sellerId);
   const mood = { willingness: reputation.willingness, floorPremium: reputation.floorPremium };
   yield { type: "start", item, request, remainingCents: remaining };
+
+  const now = Date.now();
+  for (const push of pushes) {
+    if (findListItem(list, push.itemName)) continue;
+    yield {
+      type: "declined-offer",
+      offer: declineOffer({
+        id: push.id,
+        kind: push.kind,
+        itemName: push.itemName,
+        sellerName: push.sellerName,
+        priceCents: push.priceCents,
+        pitch: push.pitch,
+        at: now,
+      }),
+    };
+  }
+
+  if (!row || bought >= row.quantity) {
+    const attempted = Math.max(1, row ? Math.min(row.maxPrice, catalogItem.listPriceCents) : catalogItem.listPriceCents);
+    if (!row) {
+      yield {
+        type: "declined-offer",
+        offer: declineOffer({
+          id: `request:${catalogItem.id}`,
+          kind: "request",
+          itemName: item.name,
+          sellerName: item.sellerName,
+          priceCents: catalogItem.listPriceCents,
+          pitch: "You asked Melit to buy this, and it is not on your list.",
+          at: now,
+        }),
+      };
+    }
+    yield { type: "blocked", guard: authorizePurchase(rawLedger, rawList, item.name, attempted, now), item, priceCents: attempted };
+    return;
+  }
+
+  const quantityRemaining = row.quantity - bought;
+  const shoppingList = list.map((entry) => ({
+    name: entry.name,
+    maxPriceUsd: centsToDollars(entry.maxPrice),
+    quantity: entry.quantity,
+    quantityRemaining: Math.max(0, entry.quantity - unitsBought(ledgerCheck.entries, entry.name)),
+  }));
+  const sellerPushContext = pushes.map((push) => ({
+    itemName: push.itemName,
+    kind: push.kind,
+    priceUsd: centsToDollars(push.priceCents),
+    onList: Boolean(findListItem(list, push.itemName)),
+    pitch: push.pitch,
+  }));
 
   let ask = catalogItem.listPriceCents;
   const history: HistoryTurn[] = [];
@@ -80,6 +145,10 @@ export async function* runShopping(
         priority: request.priority,
         profile,
         reputation,
+        listMaxPriceCents: row.maxPrice,
+        quantityRemaining,
+        shoppingList,
+        sellerPushes: sellerPushContext,
       },
       reasoner,
     );
@@ -147,7 +216,7 @@ export async function* runShopping(
       yield { type: "no-deal", message: `Deal price ${formatUsd(dealPrice)} is above your max of ${formatUsd(request.maxPriceCents)}. Not buying.` };
       outcome = "no-deal";
     } else {
-      for await (const event of purchase(catalogItem, item, dealPrice, rawLedger, deps)) {
+      for await (const event of purchase(catalogItem, item, dealPrice, rawLedger, deps, rawList)) {
         if (event.type === "purchased") {
           outcome = "purchased";
           paidCents = event.entry.paidCents;
@@ -206,8 +275,9 @@ export async function* purchase(
   priceCents: number,
   rawLedger: unknown,
   deps: PurchaseDeps = defaultDeps(),
+  rawList: unknown = undefined,
 ): AsyncGenerator<FeedEvent> {
-  const guard = authorizeSpend(rawLedger, priceCents, Date.now());
+  const guard = authorizePurchase(rawLedger, rawList, item.name, priceCents, Date.now());
   if (!guard.allowed) {
     yield { type: "blocked", guard, item, priceCents };
     return;
@@ -263,14 +333,23 @@ export async function* purchase(
 }
 
 /** Demo: Melit tries to buy something that doesn't fit the remaining weekly budget. */
-export async function* runOverspend(rawLedger: unknown, deps: PurchaseDeps = defaultDeps()): AsyncGenerator<FeedEvent> {
+export async function* runOverspend(rawLedger: unknown, deps: PurchaseDeps = defaultDeps(), rawList: unknown = undefined): AsyncGenerator<FeedEvent> {
   const check = verifyLedger(rawLedger);
-  const remaining = check.ok ? checkSpend({ ledger: check.entries, attemptedCents: 1, now: Date.now() }).remainingCents : 0;
-  // Cheapest item that no longer fits, so the block is about the rolling total, not a silly price.
-  // The espresso machine (> $300) always qualifies as a last resort.
-  const target =
-    [...CATALOG].sort((a, b) => a.listPriceCents - b.listPriceCents).find((i) => i.listPriceCents > remaining) ??
-    getCatalogItem("espresso")!;
+  const listCheck = verifyShoppingList(rawList);
+  const entries = check.ok ? check.entries : [];
+  const list = listCheck.ok ? listCheck.items : [];
+  const remaining = check.ok ? checkSpend({ ledger: entries, attemptedCents: 1, now: Date.now() }).remainingCents : 0;
+  // Prefer an on-list item that only fails the weekly cap, so this demo still shows the
+  // spending limit when the list allows the item. Otherwise the cheapest item that doesn't
+  // fit, and the espresso machine (> $300) as a last resort. The guard still decides.
+  const candidates = [...CATALOG].sort((a, b) => a.listPriceCents - b.listPriceCents);
+  const onListOverCap = candidates.find((candidate) => {
+    const allowed = findListItem(list, candidate.name);
+    if (!allowed || candidate.listPriceCents > allowed.maxPrice) return false;
+    if (unitsBought(entries, candidate.name) >= allowed.quantity) return false;
+    return candidate.listPriceCents > remaining;
+  });
+  const target = onListOverCap ?? candidates.find((candidate) => candidate.listPriceCents > remaining) ?? getCatalogItem("espresso")!;
   const item = toPublicItem(target);
   yield {
     type: "start",
@@ -278,5 +357,5 @@ export async function* runOverspend(rawLedger: unknown, deps: PurchaseDeps = def
     request: { query: item.name, maxPriceCents: target.listPriceCents, priority: "fast" },
     remainingCents: remaining,
   };
-  yield* purchase(target, item, target.listPriceCents, rawLedger, deps);
+  yield* purchase(target, item, target.listPriceCents, rawLedger, deps, rawList);
 }

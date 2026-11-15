@@ -2,7 +2,7 @@
 
 **A shopping agent with a budget, a negotiator's brain, and a savings vault.**
 
-Melit is for people who don't know how to haggle or how to save. You give it a weekly budget ($300). It negotiates the price before it buys, buys only when the deal is good and the budget allows it, and moves what it saved into a visible Savings Vault. Before every payment, the server recomputes the rolling 7-day total from a signed ledger and blocks anything over $300. That rule lives in server code, not in a prompt. (The ledger is held in your browser, so clearing it starts a new week; see [Known limitation](#how-the-spend-guard-works).)
+Melit is for people who don't know how to haggle or how to save. You give it two controls, both enforced in server code before every payment. The **shopping list** decides **what** it can buy: only the items you added, at or under each item's max price, while quantity is left. The **$300 rolling weekly cap** decides **how much** it can spend. It negotiates the price before it buys, buys only when the deal is good and both controls allow it, and moves what it saved into a visible Savings Vault. (The list and the ledger are held in your browser and signed by the server, so clearing them starts over; see [Known limitation](#how-the-spend-guard-works).)
 
 Built for **SERV Hackathon Edition 02**:
 
@@ -19,9 +19,10 @@ Most people pay the list price. They don't negotiate because it's awkward, and t
 2. **Negotiates before it buys.** Each round, SERV Reasoning decides whether to offer, accept or walk away, and returns the reasoning steps, which are shown in the UI.
 3. **Buys only good deals.** The deal must be at or under your max price and pass the Spend Guard.
 4. **Saves the difference.** `saved = list price - paid price` goes into the Savings Vault.
-5. **Hard weekly cap.** The Spend Guard blocks any payment that would push the last 7 days over $300, with a plain-English reason.
-6. **Pays on KiteAI testnet.** Approved purchases are paid in pieUSD on KiteAI testnet (chain 2368). It tries the Kite Passport sandbox first and falls back to a direct testnet transfer. Each ledger row records the rail that paid and links the transaction on KiteScan.
-7. **Learns from feedback.** A strategy profile (aggressiveness, walk-away limit, priority, notes) is sent with every negotiation. You can rate each deal, sellers review Melit, and Reppo judges each purchase. Each source changes the strategy by a small, capped step.
+5. **Shopping list (what it can buy).** You edit an allowlist of `{ name, maxPrice, quantity }`. A purchase is blocked unless that item is on the signed list, quantity is left, and the price is at or under `maxPrice`. Sellers sometimes push bundles and flash deals; Melit declines anything off the list and logs why. Adding it takes an explicit approval.
+6. **Hard weekly cap (how much it can spend).** The same Spend Guard blocks any payment that would push the last 7 days over $300, with a plain-English reason.
+7. **Pays on KiteAI testnet.** Approved purchases are paid in pieUSD on KiteAI testnet (chain 2368). It tries the Kite Passport sandbox first and falls back to a direct testnet transfer. Each ledger row records the rail that paid and links the transaction on KiteScan.
+8. **Learns from feedback.** A strategy profile (aggressiveness, walk-away limit, priority, notes) is sent with every negotiation. You can rate each deal, sellers review Melit, and Reppo judges each purchase. Each source changes the strategy by a small, capped step.
 
 ## How SERV Reasoning is used
 
@@ -38,28 +39,33 @@ Authorization: Bearer $OPENSERV_API_KEY
 }
 ```
 
-- **Every negotiation decision** is a SERV call. The model receives the item, list price, market reference price, the current ask, the negotiation history, the remaining weekly budget, your max price and your priority ("save more" or "buy fast"). It never receives the seller's hidden floor price.
+- **Every negotiation decision** is a SERV call (prompt `melit-negotiator-v3`). The model receives the item, list price, market reference price, the current ask, the negotiation history, the remaining weekly budget, your max price, your priority ("save more" or "buy fast"), and the shopping list with each row's max price and quantity remaining. It also sees seller bundles and flash deals, and is told to refuse any that are not on the list. It never receives the seller's hidden floor price.
 - It must return strict JSON: `{ "action": "offer" | "accept" | "walk", "offerPrice": number, "reasoning": string[], "confidence": number }`.
 - Output is validated with **zod**. If the call fails, times out, refuses, or returns JSON that doesn't validate, a simple heuristic takes that round and the UI labels it **Fallback heuristic** together with the reason.
-- Following SERV's "Day One" guidance, the model does the judgment and code does the arithmetic and hard limits. Ceilings and gaps are pre-computed in the prompt, and after the model decides, code guardrails clamp offers to your max price and remaining budget. Any adjustment is shown in the reasoning trail.
+- Following SERV's "Day One" guidance, the model does the judgment and code does the arithmetic and hard limits. Ceilings and gaps are pre-computed in the prompt, and after the model decides, code guardrails clamp offers to the shopping-list maximum, your max price and the remaining budget, and walk away if the item is off the list or the quantity is used up. Any adjustment is shown in the reasoning trail. The payment itself is checked again by the Spend Guard, which does not trust the model's answer.
 
 ## Architecture
 
 ```
 app/
-  page.tsx                  Dashboard (client): agent card, budget gauge, vault, form, feed, ledger
+  page.tsx                  Dashboard (client): agent card, budget gauge, vault, shopping list, form, feed, ledger
   api/agent/route.ts        GET  identity, reasoning status, public catalog
   api/negotiate/route.ts    POST stream (NDJSON) of negotiation rounds, deal, guard result, receipt
   api/overspend/route.ts    POST demo: try to buy something that doesn't fit the weekly budget
+  api/shopping-list/route.ts
+                            POST the owner's list; the response is the signed allowlist
   api/sellers/[sellerId]/checkout/route.ts
                             Mock seller x402 checkout (@x402/next, exact scheme, pieUSD on eip155:2368)
 lib/
   market/catalog.ts         4 mock sellers, 11 items, hidden floor prices (server-only)
   market/seller.ts          Deterministic seller rules (no LLM): accept at floor, shrinking counters, walk after 4 rounds
   negotiation/negotiator.ts SERV prompt + JSON schema, zod validation, fallback heuristic, guardrails
-  negotiation/run.ts        Negotiate -> deal check -> Spend Guard -> payment -> signed ledger entry
-  guard/spend-guard.ts      The pure Spend Guard function
+  negotiation/run.ts        Negotiate -> deal check -> Spend Guard (list + cap) -> payment -> signed ledger entry
+  guard/spend-guard.ts      The pure Spend Guard: shopping list, then the $300 cap
+  shopping/list.ts          Allowlist rows, quantity remaining, declined-offer log line
+  server/shopping-list.ts   List signing (HMAC) + authorizePurchase()
   server/ledger.ts          Ledger verification (HMAC) + authorizeSpend()
+  market/offers.ts          Occasional mock-seller bundles and flash deals
   adapters/reasoning.ts     ReasoningAdapter  -> SERV Reasoning
   adapters/identity.ts      Identity: Passport sandbox (confirmed via kpass) > testnet wallet > simulated
   kite/config.ts            KiteAI testnet constants (chain 2368, pieUSD, KiteScan) and the testnet scale
@@ -84,21 +90,30 @@ tests/                      vitest: spend guard, ledger tampering, sellers, nego
 
 Reasoning, identity and payments each sit behind an interface, so they can be swapped without touching the negotiation or guard logic.
 
-**No database.** The ledger lives in the browser's localStorage and is sent with every request. The server never trusts a client total. It recomputes the weekly sum from the entries on every spend.
+**No database.** The ledger and the shopping list live in the browser's localStorage and are sent with every request. The server never trusts a client total, a client "remaining quantity", or an `allowed: true` flag. It verifies the signatures, then recomputes the weekly sum and the quantity left from the entries themselves.
 
 ## How the Spend Guard works
 
-`lib/guard/spend-guard.ts` is a pure function that runs before **every** payment, including the overspend demo, which deliberately bypasses Melit's own negotiation guardrails to show that the last line of defense still holds.
+`lib/guard/spend-guard.ts` runs before **every** payment, including the overspend demo, which deliberately bypasses Melit's own negotiation guardrails to show that the last line of defense still holds. A purchase is allowed only when every rule below passes. The first failure is the reason shown in the UI.
+
+**What it can buy (the shopping list).** You edit the list, then save it. `POST /api/shopping-list` checks the rows and HMAC-signs them. Each row is `{ name, maxPrice, quantity }` with `maxPrice` in integer cents.
+
+- The item's name has to match a row (case and extra punctuation ignored).
+- Quantity remaining is `quantity` minus matching purchases in the signed ledger. The 7-day window does not refill it. Raise the quantity and save again if you want another.
+- The price has to be at or under that row's `maxPrice`.
+- Mock sellers sometimes push a bundle or a flash deal (Bundle Barn always bundles a sibling item; the flexible seller and the bluffer attach a flash deal; the firm seller only upsells the skillet when you are buying the knife). If that item is not on the list, Melit declines it in code, logs `declined: not on your list` with the reasoning, and shows **Add to list?** The button does nothing until you approve the name, max price and quantity. The model is told about the push and cannot approve the payment.
+
+**How much it can spend (the weekly cap).**
 
 - Rule: `sum(purchases in the last 7 days) + this purchase <= $300.00`, or the payment is blocked with a human-readable reason.
 - All money is integer cents, so "exactly $300.00" passes and "$300.01" is blocked.
 - Rolling window: an entry counts while it is less than 7 days old.
 - Future-dated entries still count, and negative or garbage amounts can only make the guard stricter.
-- Before the guard runs, `lib/server/ledger.ts` verifies the ledger. Every entry is HMAC-signed by the server when a purchase is approved. If a client lowers an amount, back-dates a purchase or forges an entry, the signature breaks and spending is frozen. Extra fields like `weeklySpent: 0` are stripped and ignored.
+- Before the guard runs, `lib/server/ledger.ts` verifies the ledger and `lib/server/shopping-list.ts` verifies the list. Every ledger entry is HMAC-signed by the server when a purchase is approved, and the list is HMAC-signed when you save it. If a client lowers an amount, back-dates a purchase, raises a max price, adds an item, or forges a signature, spending is frozen. Extra fields like `weeklySpent: 0`, `remaining: 9` or `allowed: true` are stripped and ignored.
 
-Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling forward, future-dated entries, invalid amounts, a client-supplied fake total, an edited amount, a back-dated entry, a forged signature and a malformed ledger.
+Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling forward, future-dated entries, invalid amounts, a client-supplied fake total, an edited amount, a back-dated entry, a forged signature and a malformed ledger. They also cover an off-list purchase, a price over the list max, a used-up quantity, a listed item that still fails the weekly cap, and a tampered list (edited max, added item, or a `remaining` field) that cannot get past the server.
 
-**Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week. The Reset demo button does exactly this on purpose. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so the $300 cap applies per browser ledger, not per wallet. A production version would persist the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
+**Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week, which also restores shopping-list quantities. The Reset demo button does exactly this on purpose. It does not clear the shopping list. Saving a new list is the owner's approval, so anyone who can use the demo as you can also save a wider list. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so both controls apply per browser, not per wallet. A production version would persist the list and the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
 
 **Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend` and `/api/reppo` are rate-limited per client IP and globally (`lib/server/rate-limit.ts`, e.g. 6 negotiations per minute and 40 per hour per IP). These counters live in each serverless instance, and Vercel spreads one client's requests over several instances (visible in the `X-RateLimit-Remaining` header), so on the deployment they bound abuse per instance rather than exactly. A Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those routes) is also configured, but a 24-request burst test did not trigger it, so treat it as unverified. A shared counter (e.g. Upstash Redis) is the proper fix and is on the roadmap. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
 
@@ -108,7 +123,7 @@ Everything runs on **KiteAI testnet** (chain ID 2368, RPC `https://rpc-testnet.g
 
 The order of checks for every purchase:
 
-1. **Spend Guard first.** It must approve the exact amount, or nothing else runs (`lib/negotiation/run.ts`).
+1. **Spend Guard first.** The signed shopping list and the $300 cap both have to approve the exact amount, or nothing else runs (`lib/negotiation/run.ts`).
 2. **Rail 1: Kite Passport sandbox.** The server runs `kpass sandbox status`, and refuses to continue unless kpass confirms sandbox mode. It then runs `kpass session execute --method GET --url <mock seller checkout> --idempotency-key <order id>` as a child process with an explicit argument list (no shell). The mock seller's checkout is a real x402 endpoint built with `@x402/next`: it answers HTTP 402 with exact-scheme pieUSD requirements on `eip155:2368` and settles through the Pieverse facilitator. It only charges orders signed by Melit after Guard approval. The approved Passport session (3 pieUSD over 7 days) is a **second** limit layer.
 3. **Rail 2: direct testnet transfer.** If Rail 1 fails for any reason other than the two exceptions below (not logged in, not sandbox, `host_not_in_executable_catalog`, `sandbox_merchant_not_allowlisted`, unreachable seller, and so on), Melit pays the mock seller straight from `AGENT_PRIVATE_KEY`. It confirms the RPC reports chain 2368, then:
    - **Gasless pieUSD (default).** The agent signs an EIP-3009 `transferWithAuthorization` for pieUSD with viem (the x402 "exact" scheme, `@x402/evm`). The Pieverse x402 facilitator verifies it, submits it on KiteAI testnet and pays the KITE gas. The x402 client's own spend control refuses to sign anything above the weekly cap, which is a third limit layer.
@@ -147,7 +162,7 @@ Melit gets better at negotiating from three kinds of feedback. All of them flow 
 | `priority` | `save` / `speed` | Standing preference; also pre-selects the request form |
 | `notes` | at most 6, ≤ 140 chars each | Lessons in the owner's words |
 
-The profile is stored in localStorage, sent with every request, clamped by the server with zod, and injected into **every SERV negotiation call** (prompt `melit-negotiator-v2`) together with Melit's seller reputation. The fallback heuristic uses it too. It is shown in the **Melit's strategy** card.
+The profile is stored in localStorage, sent with every request, clamped by the server with zod, and injected into **every SERV negotiation call** (prompt `melit-negotiator-v3`) together with Melit's seller reputation and the shopping list. The fallback heuristic uses it too. It is shown in the **Melit's strategy** card.
 
 **Bounded updates.** Every change goes through `applyBoundedUpdate`. Whatever proposes a change (SERV, a rule or a Reppo verdict), one update can move aggressiveness by at most ±0.15 (owner), ±0.10 (Reppo) or ±0.05 (market), and the walk-away limit by ±0.05 / ±0.04 / ±0.02. It can add at most one note and remove at most one. Results are always clamped to the hard ranges. A 2,000-step fuzz test checks this, including NaN and infinite deltas.
 
@@ -196,7 +211,7 @@ It only uses negotiations you ran in this browser. Nothing is pre-filled or seed
 | Seller reviews and reputation | **Deterministic rules** from the mock sellers, signed by the server. |
 | Reppo verdicts | **Real Reppo Eval Router evaluations** when `REPPO_API_KEY` is set. Only verdicts Reppo actually returned are shown. |
 | SERV Reasoning negotiation decisions | **Real** when `OPENSERV_API_KEY` is set. Rounds that use the fallback are labelled. |
-| Spend Guard and ledger signing | **Real**, enforced in server code, unit tested. |
+| Spend Guard, shopping list and ledger signing | **Real**, enforced in server code, unit tested. The list is what it can buy; the $300 cap is how much it can spend. |
 | Sellers and marketplace | **Mock sellers**: four labelled sellers with deterministic rules. Only their checkout endpoint is real x402. |
 | Agent identity | **Kite Passport sandbox** only when kpass confirms it live. Otherwise **testnet wallet** (a real key, not Passport-verified) or **Simulated**. |
 | Payments, Rail 1 | **Real Kite Passport sandbox call** with an approved session, from a local server. Kite currently refuses non-allowlisted merchants, and the receipt shows that refusal. |
@@ -218,7 +233,7 @@ git clone https://github.com/Agozie180/Melit melit && cd melit
 npm install
 cp .env.example .env.local     # set OPENSERV_API_KEY (from https://console.openserv.ai/)
 npm run dev                    # http://localhost:3000
-npm test                       # Spend Guard, negotiation, payment-rail and learning-loop tests
+npm test                       # Spend Guard, shopping list, negotiation, payment-rail and learning-loop tests
 ```
 
 Without a key the app still runs, but every round is labelled **Fallback heuristic** and a banner says SERV isn't configured. With no payment rail configured, payments are **simulated** and labelled that way.
@@ -240,7 +255,7 @@ Never put a mainnet key or a funded personal wallet in any env var. `AGENT_PRIVA
 ## Roadmap
 
 - Get the mock seller host allowlisted as a Kite sandbox merchant, so Rail 1 pays first instead of hitting `sandbox_merchant_not_allowlisted`.
-- A server-side ledger, so the weekly cap survives a cleared browser.
+- A server-side ledger and shopping list, so the weekly cap and the allowlist survive a cleared browser.
 - A shared rate-limit store, so per-IP limits hold across serverless instances.
 - Real merchant integrations and multi-seller comparison.
 

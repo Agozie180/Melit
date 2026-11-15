@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { ReasoningAdapter } from "../lib/adapters/reasoning";
 import { decide, type NegotiationContext } from "../lib/negotiation/negotiator";
 import { runOverspend, runShopping } from "../lib/negotiation/run";
-import { publicCatalog } from "../lib/market/catalog";
+import { CATALOG, publicCatalog } from "../lib/market/catalog";
 import { signEntry } from "../lib/server/ledger";
+import { signShoppingList } from "../lib/server/shopping-list";
 import type { FeedEvent } from "../lib/types";
 
 function fakeReasoner(responses: unknown[] | ((ctx: string) => unknown)): ReasoningAdapter & { calls: string[] } {
@@ -23,6 +24,8 @@ function fakeReasoner(responses: unknown[] | ((ctx: string) => unknown)): Reason
 }
 
 const earbuds = publicCatalog().find((i) => i.id === "earbuds")!;
+const earbudsList = signShoppingList([{ name: "Wireless Earbuds", maxPrice: 120_00, quantity: 3 }]);
+const catalogList = signShoppingList(CATALOG.map((item) => ({ name: item.name, maxPrice: item.listPriceCents, quantity: 2 })));
 const baseCtx: NegotiationContext = {
   item: earbuds,
   round: 1,
@@ -71,7 +74,7 @@ describe("negotiator", () => {
 
   it("never sends the hidden floor price to the model", async () => {
     const r = fakeReasoner(() => ({ action: "walk", offerPrice: 0, reasoning: ["No."], confidence: 1 }));
-    await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], r));
+    await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], r, undefined, {}, earbudsList));
     expect(r.calls.join("\n")).not.toMatch(/floor|84(\.0+)?\b/i);
   });
 });
@@ -79,7 +82,7 @@ describe("negotiator", () => {
 describe("end to end", () => {
   it("negotiates, passes the Spend Guard, and records a signed purchase", async () => {
     const r = fakeReasoner(() => ({ action: "offer", offerPrice: 90, reasoning: ["Reasonable."], confidence: 0.8 }));
-    const events = await collect(runShopping({ query: "wireless earbuds", maxPriceCents: 120_00, priority: "save" }, [], r));
+    const events = await collect(runShopping({ query: "wireless earbuds", maxPriceCents: 120_00, priority: "save" }, [], r, undefined, {}, earbudsList));
     const purchased = events.find((e) => e.type === "purchased");
     expect(purchased?.type).toBe("purchased");
     if (purchased?.type !== "purchased") return;
@@ -89,7 +92,7 @@ describe("end to end", () => {
   });
 
   it("the overspend demo is always blocked by the Spend Guard", async () => {
-    const events = await collect(runOverspend([]));
+    const events = await collect(runOverspend([], undefined, catalogList));
     expect(events.some((e) => e.type === "blocked")).toBe(true);
     expect(events.some((e) => e.type === "purchased")).toBe(false);
   });
@@ -110,11 +113,12 @@ describe("end to end", () => {
       explorerUrl: null,
       testnetAmount: null,
     });
-    const events = await collect(runOverspend([spent]));
+    const events = await collect(runOverspend([spent], undefined, catalogList));
     const blocked = events.find((e) => e.type === "blocked");
     expect(blocked?.type).toBe("blocked");
     if (blocked?.type !== "blocked") return;
     expect(blocked.priceCents).toBeLessThanOrEqual(300_00);
     expect(blocked.priceCents).toBeGreaterThan(100_00);
+    expect(blocked.guard.reason).toMatch(/weekly limit/);
   });
 });

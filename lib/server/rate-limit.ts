@@ -21,6 +21,8 @@ export const LIMITS = {
     { perClient: 60, global: 600, windowMs: 60 * 60_000 },
   ],
   overspend: [{ perClient: 20, global: 300, windowMs: 60_000 }],
+  // Signing a list is cheap, but it is still an owner action worth bounding.
+  "shopping-list": [{ perClient: 30, global: 300, windowMs: 60_000 }],
 } satisfies Record<string, LimitRule[]>;
 
 type Bucket = { start: number; count: number };

@@ -78,12 +78,29 @@ export interface GuardResult {
   capCents: number;
 }
 
+/** A seller push, or the owner's own request, that Melit refused because it was off the list. */
+export interface DeclinedOffer {
+  id: string;
+  kind: "bundle" | "flash" | "request";
+  itemName: string;
+  sellerName: string;
+  priceCents: number;
+  pitch: string;
+  /** Starts with "declined: not on your list" and includes the reason. */
+  log: string;
+  reasoning: string[];
+  /** What "Add to list?" would approve. Nothing is added until the owner confirms. */
+  suggested: { name: string; maxPrice: number; quantity: number };
+  at: number;
+}
+
 export type FeedEvent =
   | { type: "start"; item: PublicItem; request: ShoppingRequest; remainingCents: number }
   | { type: "round"; round: NegotiationRound }
   | { type: "deal"; priceCents: number; message: string }
   | { type: "no-deal"; message: string }
   | { type: "blocked"; guard: GuardResult; item: PublicItem; priceCents: number }
+  | { type: "declined-offer"; offer: DeclinedOffer }
   | { type: "purchased"; entry: LedgerEntry; receipt: PaymentReceipt; guard: GuardResult }
   | { type: "payment-failed"; message: string; attempts: RailAttempt[]; item: PublicItem; priceCents: number }
   | { type: "seller-review"; review: SellerReview; reputation: SellerReputation }

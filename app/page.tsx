@@ -10,6 +10,8 @@ import { BudgetGauge } from "./components/BudgetGauge";
 import { VaultCard } from "./components/VaultCard";
 import { RequestForm } from "./components/RequestForm";
 import { NegotiationFeed, type FeedRun } from "./components/NegotiationFeed";
+import { ShoppingListCard } from "./components/ShoppingListCard";
+import { DeclinedOffers } from "./components/DeclinedOffers";
 import { LedgerTable } from "./components/LedgerTable";
 import { StrategyCard } from "./components/StrategyCard";
 import { ReputationCard } from "./components/ReputationCard";
@@ -28,12 +30,16 @@ import {
   sendOwnerFeedback,
 } from "@/lib/client/learning";
 import { useReppoQueue } from "@/lib/client/useReppoQueue";
+import { declinedStore, listStore, saveShoppingList } from "@/lib/client/shopping-list";
+import { normalizeItemName, type ShoppingListItem } from "@/lib/shopping/list";
 import type { SellerReview } from "@/lib/learning/types";
 
 export default function Dashboard() {
   const [info, setInfo] = useState<AgentInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const ledger = useSyncExternalStore(ledgerStore.subscribe, ledgerStore.getSnapshot, ledgerStore.getServerSnapshot);
+  const shoppingList = useSyncExternalStore(listStore.subscribe, listStore.getSnapshot, listStore.getServerSnapshot);
+  const declined = useSyncExternalStore(declinedStore.subscribe, declinedStore.getSnapshot, declinedStore.getServerSnapshot);
   const profile = useSyncExternalStore(profileStore.subscribe, profileStore.getSnapshot, profileStore.getServerSnapshot);
   const deals = useSyncExternalStore(dealsStore.subscribe, dealsStore.getSnapshot, dealsStore.getServerSnapshot);
   const reviews = useSyncExternalStore(reviewsStore.subscribe, reviewsStore.getSnapshot, reviewsStore.getServerSnapshot);
@@ -74,6 +80,9 @@ export default function Dashboard() {
         if (e.type === "purchased") {
           ledgerStore.append(e.entry);
         }
+        if (e.type === "declined-offer") {
+          declinedStore.add(e.offer);
+        }
         if (e.type === "seller-review") {
           review = e.review;
           recordSellerReview(e.review);
@@ -88,7 +97,13 @@ export default function Dashboard() {
       try {
         await streamEvents(
           url,
-          { ...body, ledger: ledgerStore.getSnapshot(), profile: profileStore.getSnapshot(), reviews: reviewsStore.getSnapshot() },
+          {
+            ...body,
+            ledger: ledgerStore.getSnapshot(),
+            list: listStore.getSnapshot(),
+            profile: profileStore.getSnapshot(),
+            reviews: reviewsStore.getSnapshot(),
+          },
           push,
         );
       } catch (err) {
@@ -105,8 +120,16 @@ export default function Dashboard() {
   const overspend = () => run("overspend", "/api/overspend", {});
   const reset = () => {
     ledgerStore.clear();
+    declinedStore.clear();
     setRuns([]);
   };
+
+  const approveAdd = useCallback(async (item: ShoppingListItem) => {
+    const current = listStore.getSnapshot()?.items ?? [];
+    const key = normalizeItemName(item.name);
+    const next = [...current.filter((row) => normalizeItemName(row.name) !== key), item];
+    await saveShoppingList(next);
+  }, []);
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
@@ -116,8 +139,7 @@ export default function Dashboard() {
             Melit<span className="text-emerald-600">.</span>
           </h1>
           <p className="mt-1 max-w-md text-sm text-neutral-600">
-            A shopping agent with a budget, a negotiator&apos;s brain and a savings vault. It haggles before it buys, and the server blocks any payment
-            that would take your signed 7-day ledger over $300.
+            A shopping agent with a budget, a negotiator&apos;s brain and a savings vault. It haggles before it buys. The shopping list decides what it can buy, and the server blocks any payment that would take your signed 7-day ledger over $300.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
             Kite + Reppo tracks · Mock sellers · payments: {paymentsLabel} · decisions by SERV Reasoning ·{" "}
@@ -137,10 +159,25 @@ export default function Dashboard() {
       )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <BudgetGauge spentCents={spentCents} capCents={capCents} />
           <VaultCard savedCents={savedCents} purchases={ledger.length} />
-          <RequestForm catalog={info?.catalog ?? []} busy={busy} onSubmit={shop} defaultPriority={profile.priority === "speed" ? "fast" : "save"} />
+          <ShoppingListCard
+            signed={shoppingList}
+            ledger={ledger}
+            catalog={info?.catalog ?? []}
+            onSave={async (items) => {
+              await saveShoppingList(items);
+            }}
+          />
+          <RequestForm
+            catalog={info?.catalog ?? []}
+            list={shoppingList?.items ?? []}
+            ledger={ledger}
+            busy={busy}
+            onSubmit={shop}
+            defaultPriority={profile.priority === "speed" ? "fast" : "save"}
+          />
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -167,8 +204,9 @@ export default function Dashboard() {
           />
           <ReputationCard reviews={reviews} sellers={sellers} />
         </div>
-        <div className="space-y-4">
-          <NegotiationFeed runs={runs} />
+        <div className="min-w-0 space-y-4">
+          <NegotiationFeed runs={runs} signed={shoppingList} onApprove={approveAdd} />
+          <DeclinedOffers offers={declined} signed={shoppingList} onApprove={approveAdd} onClear={declinedStore.clear} />
           <DealFeedback deals={deals} jobs={reppoJobs} log={learningLog} reppoConfigured={reppoConfigured} onFeedback={sendOwnerFeedback} />
           <MetricsCard deals={deals} jobs={reppoJobs} />
           <LearningLog log={learningLog} />

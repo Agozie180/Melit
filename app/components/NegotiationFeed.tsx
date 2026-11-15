@@ -1,5 +1,7 @@
 import type { FeedEvent, NegotiationRound } from "@/lib/types";
 import { formatUsd } from "@/lib/money";
+import { findListItem, type ShoppingListItem, type SignedShoppingList } from "@/lib/shopping/list";
+import { ApproveAdd } from "./ApproveAdd";
 import { Badge, Card, CardTitle } from "./ui";
 import { AttemptTrail, ReceiptDetails } from "./Receipt";
 import { Stars } from "./ReputationCard";
@@ -70,7 +72,15 @@ function RoundView({ round }: { round: NegotiationRound }) {
   );
 }
 
-function RunView({ run }: { run: FeedRun }) {
+function RunView({
+  run,
+  signed,
+  onApprove,
+}: {
+  run: FeedRun;
+  signed: SignedShoppingList | null;
+  onApprove: (item: ShoppingListItem) => Promise<void>;
+}) {
   const start = run.events.find((e) => e.type === "start");
   return (
     <article className="space-y-2 border-b border-black/[0.06] pb-4 last:border-0 last:pb-0">
@@ -103,10 +113,28 @@ function RunView({ run }: { run: FeedRun }) {
                   {e.message}
                 </li>
               );
+            case "declined-offer":
+              return (
+                <li key={i} className="feed-in rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">
+                  <p className="font-semibold">{e.offer.log}</p>
+                  <ul className="mt-1 list-disc pl-4 text-xs text-amber-950/80">
+                    {e.offer.reasoning.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2">
+                    {signed && findListItem(signed.items, e.offer.itemName) ? (
+                      <Badge tone="green">On your list</Badge>
+                    ) : (
+                      <ApproveAdd suggested={e.offer.suggested} onApprove={onApprove} />
+                    )}
+                  </div>
+                </li>
+              );
             case "blocked":
               return (
                 <li key={i} className="feed-in rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
-                  <p className="font-semibold">Spend Guard blocked a {formatUsd(e.priceCents)} payment</p>
+                  <p className="font-semibold">Spend Guard blocked this purchase ({formatUsd(e.priceCents)})</p>
                   <p className="mt-1">{e.guard.reason}</p>
                   <p className="mt-1 text-xs text-red-700/80">No payment was attempted. The guard runs on the server before every payment.</p>
                 </li>
@@ -157,7 +185,15 @@ function RunView({ run }: { run: FeedRun }) {
   );
 }
 
-export function NegotiationFeed({ runs }: { runs: FeedRun[] }) {
+export function NegotiationFeed({
+  runs,
+  signed,
+  onApprove,
+}: {
+  runs: FeedRun[];
+  signed: SignedShoppingList | null;
+  onApprove: (item: ShoppingListItem) => Promise<void>;
+}) {
   return (
     <Card>
       <CardTitle>Live negotiation feed</CardTitle>
@@ -169,7 +205,7 @@ export function NegotiationFeed({ runs }: { runs: FeedRun[] }) {
       ) : (
         <div className="space-y-4">
           {runs.map((run) => (
-            <RunView key={run.id} run={run} />
+            <RunView key={run.id} run={run} signed={signed} onApprove={onApprove} />
           ))}
         </div>
       )}

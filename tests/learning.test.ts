@@ -24,6 +24,7 @@ import { sellerRespond } from "../lib/market/seller";
 import { decide, type NegotiationContext } from "../lib/negotiation/negotiator";
 import { runShopping } from "../lib/negotiation/run";
 import { verifyDealSummary } from "../lib/server/deal-summary";
+import { signShoppingList } from "../lib/server/shopping-list";
 import type { FeedEvent } from "../lib/types";
 
 function fakeReasoner(responses: unknown[] | ((user: string, system: string) => unknown)): ReasoningAdapter & { calls: { system: string; user: string }[] } {
@@ -58,9 +59,10 @@ function rng(seed: number) {
 
 const earbuds = publicCatalog().find((i) => i.id === "earbuds")!;
 const offerAt = (usd: number) => ({ action: "offer", offerPrice: usd, reasoning: ["Offer."], confidence: 0.7 });
+const earbudsList = signShoppingList([{ name: "Wireless Earbuds", maxPrice: 120_00, quantity: 5 }]);
 
 async function purchaseSummary(): Promise<DealSummary> {
-  const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90))));
+  const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90)), undefined, {}, earbudsList));
   const s = events.find((e) => e.type === "summary");
   if (s?.type !== "summary") throw new Error("no summary");
   return s.summary;
@@ -131,7 +133,7 @@ describe("learned strategy in negotiation", () => {
   it("injects the profile and reputation into every SERV call", async () => {
     const r = fakeReasoner([offerAt(80)]);
     await decide({ ...ctx, profile: { ...DEFAULT_PROFILE, aggressiveness: 0.8, notes: ["Never pay list price"] }, reputation: reputationFor([], earbuds.sellerId) }, r);
-    expect(r.calls[0].system).toMatch(/melit-negotiator-v2/);
+    expect(r.calls[0].system).toMatch(/melit-negotiator-v3/);
     const payload = JSON.parse(r.calls[0].user.slice(r.calls[0].user.indexOf("{")));
     expect(payload.strategyProfile.aggressiveness).toBe(0.8);
     expect(payload.strategyProfile.notes).toEqual(["Never pay list price"]);
@@ -167,7 +169,11 @@ describe("market feedback", () => {
     const kind = reviewDeal({ item: knife, offersCents: [85_00], outcome: "purchased", paidCents: 85_00 });
     expect(kind.pressure).toBe("generous");
     expect(kind.rating).toBe(5);
-    expect(JSON.stringify(insult)).not.toMatch(/72(\.0+)?\b|7200|floor/i);
+    const { id, sig, at, ...visible } = insult;
+    expect(JSON.stringify(visible)).not.toMatch(/72(\.0+)?\b|7200|floor/i);
+    expect(id).toMatch(/^rev_/);
+    expect(sig.length).toBeGreaterThan(10);
+    expect(at).toBeGreaterThan(0);
   });
 
   it("only accepts server-signed reviews", () => {
@@ -208,7 +214,7 @@ describe("market feedback", () => {
 
 describe("deal summaries and Reppo input", () => {
   it("each negotiation ends with a signed summary and a seller review", async () => {
-    const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90))));
+    const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90)), undefined, {}, earbudsList));
     const types = events.map((e) => e.type);
     expect(types.slice(-2)).toEqual(["seller-review", "summary"]);
     const summary = (events.at(-1) as Extract<FeedEvent, { type: "summary" }>).summary;
@@ -276,7 +282,7 @@ describe("Reppo is asynchronous and optional", () => {
     }));
     const client = new ReppoClient({ apiKey: "test", baseUrl: "http://reppo.invalid/api/v1" });
     await expect(client.submit("action", "hello")).rejects.toMatchObject({ status: 0, retryable: true });
-    const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90))));
+    const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90)), undefined, {}, earbudsList));
     expect(events.some((e) => e.type === "purchased")).toBe(true);
     expect(events.at(-1)?.type).toBe("summary");
   });
@@ -289,7 +295,7 @@ describe("Reppo is asynchronous and optional", () => {
     let jobs = enqueue([], "deal_1", 0);
     jobs = markSubmitted(jobs, "deal_1", "eval_1", "QUEUED", 0);
     jobs = enqueue(jobs, "deal_2", 1);
-    const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90))));
+    const events = await collect(runShopping({ query: "earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(() => offerAt(90)), undefined, {}, earbudsList));
     expect(events.some((e) => e.type === "purchased")).toBe(true);
     // The queue stays one-at-a-time: deal_2 waits while deal_1 is pending.
     expect(nextAction(jobs, 5_000)).toBeNull();

@@ -8,6 +8,7 @@ import { centsToTestnetUnits, formatTestnetAmount } from "../lib/kite/config";
 import { purchase, runOverspend, type PurchaseDeps } from "../lib/negotiation/run";
 import { getCatalogItem, toPublicItem } from "../lib/market/catalog";
 import { signEntry, verifyEntry } from "../lib/server/ledger";
+import { signShoppingList } from "../lib/server/shopping-list";
 import type { FeedEvent } from "../lib/types";
 
 const SELLER_URL = "https://melit.example";
@@ -81,7 +82,8 @@ describe("Spend Guard runs before any payment rail", () => {
     const deps: PurchaseDeps = { pay: (o) => router.pay(o) };
 
     const item = getCatalogItem("earbuds")!;
-    const events = await collect(purchase(item, toPublicItem(item), 20_00, ledgerWith(290_00), deps));
+    const list = signShoppingList([{ name: "Wireless Earbuds", maxPrice: 120_00, quantity: 1 }]);
+    const events = await collect(purchase(item, toPublicItem(item), 20_00, ledgerWith(290_00), deps, list));
 
     expect(events.map((e) => e.type)).toEqual(["blocked"]);
     expect(kpass.calls).toHaveLength(0);
@@ -175,7 +177,8 @@ describe("rail fallback", () => {
   it("a failed payment produces no ledger entry", async () => {
     const router = new PaymentRouter([]);
     const item = getCatalogItem("lamp")!;
-    const events = await collect(purchase(item, toPublicItem(item), 40_00, [], { pay: (o) => router.pay(o) }));
+    const list = signShoppingList([{ name: "LED Desk Lamp", maxPrice: 49_00, quantity: 1 }]);
+    const events = await collect(purchase(item, toPublicItem(item), 40_00, [], { pay: (o) => router.pay(o) }, list));
     expect(events.map((e) => e.type)).toEqual(["payment-failed"]);
   });
 });

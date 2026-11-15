@@ -5,7 +5,11 @@
  * answer, no I/O, no clock reads (the caller passes `now`). That makes it trivially
  * testable and impossible for a prompt, a model, or a UI to talk it out of a decision.
  *
- * Rule: (sum of purchases in the rolling 7-day window) + (this purchase) <= $300.
+ * Two rules, both decided here in code:
+ * - What it can buy: the item is on the owner's shopping list, quantity is left, and the
+ *   price is at or under that item's max. See `checkPurchase`.
+ * - How much it can spend: (sum of purchases in the rolling 7-day window) + this
+ *   purchase <= $300. See `checkSpend`.
  *
  * Design notes:
  * - Money is integer cents, so "exactly $300.00" vs "$300.01" is an exact comparison.
@@ -24,6 +28,7 @@
 
 import type { GuardResult } from "../types";
 import { WEEKLY_CAP_CENTS, WINDOW_MS, formatUsd } from "../money";
+import { findListItem, unitsBought, type ShoppingListItem } from "../shopping/list";
 
 export interface GuardLedgerEntry {
   paidCents: number;
@@ -86,4 +91,50 @@ export function checkSpend(input: GuardInput): GuardResult {
     allowed: true,
     reason: `Approved: ${formatUsd(attempted)} fits. ${formatUsd(remaining - attempted)} will remain in the 7-day window.`,
   };
+}
+
+export interface PurchaseInput extends GuardInput {
+  ledger: readonly (GuardLedgerEntry & { itemName: string })[];
+  itemName: string;
+  /** The owner's approved rows. Quantity remaining is computed from `ledger`, not from this list. */
+  list: readonly ShoppingListItem[];
+}
+
+/**
+ * Full Spend Guard for one purchase. The list is checked first (what Melit may buy), then
+ * the weekly cap (how much it may spend). The first failure is the reason the caller shows.
+ */
+export function checkPurchase(input: PurchaseInput): GuardResult {
+  const attempted = input.attemptedCents;
+  if (!Number.isInteger(attempted) || attempted <= 0) return checkSpend(input);
+
+  const cap = checkSpend(input);
+  const row = findListItem(input.list, input.itemName);
+  if (!row) {
+    return {
+      ...cap,
+      allowed: false,
+      reason: `Blocked: "${input.itemName}" is not on your shopping list. Melit can only buy items you added and approved.`,
+    };
+  }
+
+  const bought = unitsBought(input.ledger, row.name);
+  if (bought >= row.quantity) {
+    const verb = bought === 1 ? "has" : "have";
+    return {
+      ...cap,
+      allowed: false,
+      reason: `Blocked: your shopping list allows ${row.quantity} of "${row.name}" and ${bought} ${verb} already been bought, so none are left.`,
+    };
+  }
+
+  if (attempted > row.maxPrice) {
+    return {
+      ...cap,
+      allowed: false,
+      reason: `Blocked: ${formatUsd(attempted)} is above the ${formatUsd(row.maxPrice)} maximum you set for "${row.name}" on your shopping list.`,
+    };
+  }
+
+  return cap;
 }
