@@ -1,16 +1,23 @@
-import type { FeedEvent, LedgerEntry, PublicItem } from "../types";
+import type { FeedEvent, LedgerEntry, PaymentRailId, PublicItem } from "../types";
 import type { AgentIdentity } from "../adapters/identity";
 
 export interface AgentInfo {
   identity: AgentIdentity;
-  payments: { mode: "simulated" | "kite-x402" };
+  payments: {
+    mode: "testnet" | "recorded" | "simulated";
+    rails: PaymentRailId[];
+    network: string;
+    chainId: number;
+    asset: string;
+    testnetScale: number;
+  };
   reasoning: { provider: string; model: string; configured: boolean };
   capCents: number;
   feeRate: number;
   catalog: PublicItem[];
 }
 
-const LEDGER_KEY = "melit.ledger.v1";
+const LEDGER_KEY = "melit.ledger.v2";
 const EMPTY: LedgerEntry[] = [];
 const listeners = new Set<() => void>();
 let cache: { raw: string | null; parsed: LedgerEntry[] } | undefined;
