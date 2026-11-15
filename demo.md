@@ -57,9 +57,9 @@ Stop. Do not wait on camera for a Reppo verdict. If a score is already on screen
 - "Reppo scored this purchase" unless the verdict is visible.
 - "Melit earns 15%." The vault shows 15% of the saving. Nothing is collected.
 
-## Appendix — `demo.mp4` is a different cut
+## Appendix — older screen recording (not in the repo)
 
-`demo.mp4` is a 1:55, 1920×1080, 30 fps recording. It is not this 90-second script. A judge who watches the file is not watching the acts above in this order.
+A 1:55 local capture used to live in the repo as `demo.mp4`. It is removed from GitHub to keep the clone small. It is not this 90-second script. Prefer [demo.md](./demo.md) + https://melit.vercel.app or your X demo link.
 
 What that file actually contains:
 

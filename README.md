@@ -16,7 +16,7 @@ The coverage badge is the line rate from `npm run test:coverage` on 15 Nov 2026:
 | --- | --- |
 | Live app | https://melit.vercel.app |
 | Production check | Vercel production `dpl_3PaCYdWGiVNf7xi9AMUmi9yACEA9` is READY for `7af69c8`. A fetch of that URL on 15 Nov 2026 contained "Shopping list". |
-| Demo | [demo.md](./demo.md) is the 90-second script. [demo.mp4](./demo.mp4) is an older 1:55 cut and does not follow that script. |
+| Demo | [demo.md](./demo.md) is the 90-second script. Use https://melit.vercel.app or your X demo video; no `demo.mp4` in the repo. |
 | Write-up | [SUBMISSION.md](./SUBMISSION.md) |
 | Judging brief | [JUDGING.md](./JUDGING.md) |
 | Blueprint | [ARCHITECTURE.md](./ARCHITECTURE.md) |

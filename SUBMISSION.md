@@ -4,7 +4,7 @@
 
 **Repo:** https://github.com/Agozie180/Melit (must be **public** before submit) · **Judge's sheet:** [README.md](./README.md)
 
-**Also:** [JUDGING.md](./JUDGING.md), [ARCHITECTURE.md](./ARCHITECTURE.md), [AUDIT.md](./AUDIT.md), [demo.md](./demo.md) (90 s script). Optional longer cut: `demo.mp4`.
+**Also:** [JUDGING.md](./JUDGING.md), [ARCHITECTURE.md](./ARCHITECTURE.md), [AUDIT.md](./AUDIT.md), [demo.md](./demo.md) (90 s script). Demo video: live app or your X post (not committed to git).
 
 **Live demo:** https://melit.vercel.app/
 

@@ -43,3 +43,9 @@ next-env.d.ts
 
 # Kite Passport project-local config and agent runtime key (never commit)
 .kite-passport/
+
+# Next.js auto-generates this for local agents; not part of the product
+AGENTS.md
+
+# Large demo recording — keep local or host on X; not in the repo
+demo.mp4
