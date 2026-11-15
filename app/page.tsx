@@ -16,6 +16,7 @@ import { LedgerTable } from "./components/LedgerTable";
 import { StrategyCard } from "./components/StrategyCard";
 import { ReputationCard } from "./components/ReputationCard";
 import { DealFeedback } from "./components/DealFeedback";
+import { ReppoTrackCard } from "./components/ReppoTrackCard";
 import { MetricsCard } from "./components/MetricsCard";
 import { LearningLog } from "./components/LearningLog";
 import {
@@ -210,6 +211,7 @@ export default function Dashboard() {
         <div className="min-w-0 space-y-4">
           <NegotiationFeed runs={runs} signed={shoppingList} onApprove={approveAdd} />
           <DeclinedOffers offers={declined} signed={shoppingList} onApprove={approveAdd} onClear={declinedStore.clear} />
+          <ReppoTrackCard jobs={reppoJobs} deals={deals} reppoConfigured={reppoConfigured} />
           <DealFeedback deals={deals} jobs={reppoJobs} log={learningLog} reppoConfigured={reppoConfigured} onFeedback={sendOwnerFeedback} />
           <MetricsCard deals={deals} jobs={reppoJobs} />
           <LearningLog log={learningLog} />
