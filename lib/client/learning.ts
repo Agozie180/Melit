@@ -7,6 +7,7 @@ import { marketLesson } from "../learning/market";
 import { reputationFor } from "../learning/reputation";
 import { enqueue } from "../learning/reppo-queue";
 import type { DealRecord, DealSummary, FeedbackResponse, LearningEvent, ReppoJob, SellerReputation, SellerReview } from "../learning/types";
+import { melitFetch } from "./budget";
 
 function createJsonStore<T>(key: string, fallback: T, parse: (raw: unknown) => T) {
   const listeners = new Set<() => void>();
@@ -140,7 +141,7 @@ export function backfillReppoJobs() {
 }
 
 async function postFeedback(body: Record<string, unknown>): Promise<FeedbackResponse> {
-  const res = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await melitFetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = (await res.json().catch(() => null)) as (FeedbackResponse & { error?: string; retryable?: boolean }) | null;
   if (!res.ok || !data?.profile) {
     const err = new Error(data?.error ?? `Feedback failed (HTTP ${res.status})`) as Error & { retryable?: boolean };

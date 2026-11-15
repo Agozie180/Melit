@@ -1,4 +1,5 @@
 import type { DeclinedOffer } from "../types";
+import { melitFetch } from "./budget";
 import type { ShoppingListItem, SignedShoppingList } from "../shopping/list";
 
 const LIST_KEY = "melit.list.v1";
@@ -90,7 +91,7 @@ export const declinedStore = {
 };
 
 export async function saveShoppingList(items: ShoppingListItem[]): Promise<SignedShoppingList> {
-  const res = await fetch("/api/shopping-list", {
+  const res = await melitFetch("/api/shopping-list", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items }),

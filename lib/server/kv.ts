@@ -84,3 +84,49 @@ export async function kvIncrWindow(key: string, windowMs: number, now: number): 
 export function resetKvFileStoreForTests() {
   redis = null;
 }
+
+const fileLocks = new Map<string, Promise<void>>();
+
+async function withFileScopeLock<T>(scopeId: string, fn: () => Promise<T>): Promise<T> {
+  const key = `lock:${scopeId}`;
+  const prev = fileLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const chain = prev.then(() => gate);
+  fileLocks.set(
+    key,
+    chain.finally(() => {
+      if (fileLocks.get(key) === chain) fileLocks.delete(key);
+    }),
+  );
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+/** Serializes purchase commits per scope (Redis NX lock on Vercel, in-process queue on disk). */
+export async function withScopeLock<T>(scopeId: string, fn: () => Promise<T>): Promise<T> {
+  if (!scopeId) return fn();
+  const r = getRedis();
+  const lockKey = `melit:lock:${scopeId}`;
+  if (r) {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const ok = await r.set(lockKey, "1", { nx: true, ex: 45 });
+      if (ok === "OK") {
+        try {
+          return await fn();
+        } finally {
+          await r.del(lockKey);
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`Could not acquire financial lock for scope ${scopeId}`);
+  }
+  return withFileScopeLock(scopeId, fn);
+}

@@ -1,5 +1,6 @@
 import type { FeedEvent, LedgerEntry, PaymentRailId, PublicItem } from "../types";
 import type { AgentIdentity } from "../adapters/identity";
+import { melitFetch } from "./budget";
 
 export interface AgentInfo {
   identity: AgentIdentity;
@@ -70,11 +71,13 @@ export type FinancialState = {
   ledger: LedgerEntry[];
   list: import("../shopping/list").SignedShoppingList | null;
   persistent: boolean;
+  ledgerLocked?: boolean;
+  ledgerInvalidReason?: string | null;
 };
 
 /** Loads the server-held ledger and signed list (authoritative for Spend Guard). */
 export async function syncFinancialState(): Promise<FinancialState> {
-  const res = await fetch("/api/state", { cache: "no-store", credentials: "include" });
+  const res = await melitFetch("/api/state", { cache: "no-store" });
   if (!res.ok) throw new Error(`Couldn't load financial state (HTTP ${res.status})`);
   const data = (await res.json()) as FinancialState;
   ledgerStore.replace(Array.isArray(data.ledger) ? data.ledger : []);
@@ -86,7 +89,7 @@ export async function syncFinancialState(): Promise<FinancialState> {
 }
 
 export async function resetDemoLedger(): Promise<void> {
-  await fetch("/api/state", { method: "DELETE", credentials: "include" });
+  await melitFetch("/api/state", { method: "DELETE" });
   ledgerStore.clear();
 }
 
@@ -107,14 +110,14 @@ export const clockStore = {
 };
 
 export async function fetchAgentInfo(): Promise<AgentInfo> {
-  const res = await fetch("/api/agent", { cache: "no-store" });
+  const res = await melitFetch("/api/agent", { cache: "no-store" });
   if (!res.ok) throw new Error(`Couldn't load agent info (HTTP ${res.status})`);
   return res.json();
 }
 
 /** POSTs and calls onEvent for each NDJSON line as it arrives. */
 export async function streamEvents(url: string, body: unknown, onEvent: (e: FeedEvent) => void): Promise<void> {
-  const res = await fetch(url, {
+  const res = await melitFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

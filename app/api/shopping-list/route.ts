@@ -3,7 +3,7 @@ import { duplicateItemMessage } from "@/lib/shopping/list";
 import { ShoppingListItemSchema, signShoppingList } from "@/lib/server/shopping-list";
 import { setSignedList } from "@/lib/server/demo-state";
 import { checkRateLimit, withRemaining } from "@/lib/server/rate-limit";
-import { sessionIdFromRequest } from "@/lib/server/request-session";
+import { financialScopeFromRequest } from "@/lib/server/request-session";
 
 const BodySchema = z.object({
   items: z.array(ShoppingListItemSchema).max(30),
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const dup = duplicateItemMessage(body.data.items);
   if (dup) return Response.json({ error: dup }, { status: 400 });
   const signed = signShoppingList(body.data.items);
-  const sid = sessionIdFromRequest(req);
-  if (sid) await setSignedList(sid, signed);
+  const scopeId = financialScopeFromRequest(req);
+  if (scopeId) await setSignedList(scopeId, signed);
   return withRemaining(Response.json(signed), remaining);
 }

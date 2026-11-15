@@ -7,13 +7,14 @@
 import { useEffect, useRef } from "react";
 import { markError, markLearned, markPolled, markSubmitted, nextAction, verdictsToLearn } from "../learning/reppo-queue";
 import type { ReppoVerdict } from "../learning/types";
+import { melitFetch } from "./budget";
 import { backfillReppoJobs, dealsStore, learnFromReppo, reppoJobsStore } from "./learning";
 
 const TICK_MS = 1_500;
 const LEARN_RETRY_MS = 30_000;
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json" }, cache: "no-store" });
+  const res = await melitFetch(url, { ...init, headers: { "Content-Type": "application/json" }, cache: "no-store" });
   const data = (await res.json().catch(() => null)) as (T & { error?: string; retryable?: boolean }) | null;
   if (!res.ok || !data) {
     throw Object.assign(new Error(data?.error ?? `HTTP ${res.status}`), { retryable: data?.retryable ?? (res.status >= 500 || res.status === 429) });

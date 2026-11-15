@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { purchase, runShopping, type PurchaseDeps } from "../lib/negotiation/run";
 import { getCatalogItem, toPublicItem } from "../lib/market/catalog";
-import { appendLedgerEntry, loadDemoState, resetLedger, setSignedList, wipeDemoSession } from "../lib/server/demo-state";
+import { resetLedger, setSignedList, wipeDemoSession, loadDemoState } from "../lib/server/demo-state";
+import { purchaseHooks } from "../lib/server/purchase-scope";
 import { signShoppingList } from "../lib/server/shopping-list";
 import type { FeedEvent, LedgerEntry, PaymentReceipt } from "../lib/types";
 import type { ReasoningAdapter } from "../lib/adapters/reasoning";
@@ -52,9 +53,7 @@ describe("server-persisted financial state", () => {
     const list = signShoppingList([{ name: "Wireless Earbuds", maxPrice: 120_00, quantity: 1 }]);
     await setSignedList(sid, list);
 
-    const hooks = {
-      onLedgerAppend: (entry: LedgerEntry) => appendLedgerEntry(sid, entry),
-    };
+    const hooks = purchaseHooks(sid, list);
 
     await collect(
       runShopping({ query: "wireless earbuds", maxPriceCents: 120_00, priority: "save" }, [], fakeReasoner(), deps, {}, list, hooks),
@@ -90,9 +89,7 @@ describe("server-persisted financial state", () => {
     await setSignedList(sid, list);
     const item = getCatalogItem("lamp")!;
     const events = await collect(
-      purchase(item, toPublicItem(item), 40_00, [], deps, list, {
-        onLedgerAppend: (entry) => appendLedgerEntry(sid, entry),
-      }),
+      purchase(item, toPublicItem(item), 40_00, [], deps, list, purchaseHooks(sid, list)),
     );
     expect(events.at(-1)?.type).toBe("purchased");
     expect((await loadDemoState(sid)).ledger).toHaveLength(1);

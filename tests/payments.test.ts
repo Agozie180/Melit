@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KitePassportSandboxRail, type KpassResult, type KpassRunner } from "../lib/payments/kpass-rail";
+import { resetSandboxMerchantCache } from "../lib/kite/sandbox-merchant";
 import { PaymentRouter } from "../lib/payments/router";
 import { RecordedRail } from "../lib/payments/offline-rails";
 import { signOrder, verifyOrder } from "../lib/payments/order-token";
@@ -108,6 +109,10 @@ describe("Spend Guard runs before any payment rail", () => {
 });
 
 describe("rail fallback", () => {
+  beforeEach(() => {
+    resetSandboxMerchantCache();
+  });
+
   it("falls back to a direct testnet transfer when Passport errors", async () => {
     const kpass = fakeKpass({
       exitCode: 1,
@@ -126,6 +131,25 @@ describe("rail fallback", () => {
       { rail: "direct-testnet", ok: true },
     ]);
     expect(direct.pay).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers the merchant host before session execute", async () => {
+    const kpass = fakeKpass({
+      exitCode: 0,
+      json: {
+        status: "success",
+        x402: { status_code: 200, chain_id: 2368, payment_response: { reference: "0x" + "cd".repeat(32), success: true } },
+        payment_requirement: { amount: "0.9", asset: "pieUSD" },
+      },
+      stderr: "",
+    });
+    await new PaymentRouter([new KitePassportSandboxRail(kpass.run, SELLER_URL)]).pay(order);
+    const register = kpass.calls.find((c) => c.includes("merchant") && (c.includes("register") || c.includes("allowlist")));
+    expect(register).toBeTruthy();
+    const execIdx = kpass.calls.findIndex((c) => c[0] === "session");
+    const regIdx = kpass.calls.findIndex((c) => c === register);
+    expect(regIdx).toBeGreaterThanOrEqual(0);
+    expect(regIdx).toBeLessThan(execIdx);
   });
 
   it("calls kpass with explicit args and a signed seller checkout URL", async () => {
