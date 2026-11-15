@@ -20,7 +20,10 @@ function entry(paidCents: number, timestamp: number, id = `e-${paidCents}-${time
       savedCents: 1000,
       timestamp,
       receiptId: `sim_${id}`,
-      paymentMode: "simulated",
+      rail: "simulated",
+      txHash: null,
+      explorerUrl: null,
+      testnetAmount: null,
     },
     SECRET,
   );

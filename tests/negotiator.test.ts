@@ -85,7 +85,7 @@ describe("end to end", () => {
     if (purchased?.type !== "purchased") return;
     expect(purchased.entry.paidCents).toBe(90_00);
     expect(purchased.entry.savedCents).toBe(earbuds.listPriceCents - 90_00);
-    expect(purchased.receipt.mode).toBe("simulated");
+    expect(purchased.receipt.rail).toBe("simulated");
   });
 
   it("the overspend demo is always blocked by the Spend Guard", async () => {
@@ -105,7 +105,10 @@ describe("end to end", () => {
       savedCents: 29_00,
       timestamp: Date.now() - 1000,
       receiptId: "sim_1",
-      paymentMode: "simulated",
+      rail: "simulated",
+      txHash: null,
+      explorerUrl: null,
+      testnetAmount: null,
     });
     const events = await collect(runOverspend([spent]));
     const blocked = events.find((e) => e.type === "blocked");
