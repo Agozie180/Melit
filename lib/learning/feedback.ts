@@ -48,7 +48,7 @@ Prompt version: melit-learner-v1.
 You receive the current strategy profile, one finished negotiation and one piece of feedback about it (${source === "owner" ? "from the owner" : "from Reppo, an external panel of AI evaluators"}). Propose the smallest strategy change that addresses the feedback.
 
 Strategy knobs:
-- aggressiveness (0..1): higher opens lower and concedes slower. Raise it if Melit overpaid or gave in too easily; lower it if Melit lost a deal by lowballing, annoyed the seller or took too long.
+- aggressiveness (0..1): higher = opens lower AND raises its offer in smaller steps each round; lower = opens closer to the ask and raises in bigger steps. Raise it if Melit overpaid, gave in too easily or raised its offers too fast/in too big jumps. Lower it if Melit lost a deal by lowballing, annoyed the seller, or the owner wants it to close sooner/in fewer rounds.
 - walkAwayThreshold (fraction of market reference, 0.85..1.3): the most Melit will pay. Raise it if Melit walked away from a deal the owner wanted; lower it if the owner felt Melit paid too much.
 - priority: "save" (maximise savings) or "speed" (close in fewer rounds). Change only if the feedback is clearly about it.
 - notes: short lessons in the owner's words. Add one only if it is a reusable rule (not a one-off comment). Remove one only if this feedback directly contradicts it.
