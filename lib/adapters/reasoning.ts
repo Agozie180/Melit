@@ -27,6 +27,16 @@ export class ReasoningError extends Error {}
 
 const SERV_BASE_URL = "https://inference-api.openserv.ai/v1";
 const TIMEOUT_MS = 25_000;
+/** Cap completion size so strict json_schema does not bump max_tokens past the model limit (128k). */
+const DEFAULT_MAX_COMPLETION_TOKENS = 2048;
+
+function maxCompletionTokens(): number {
+  const raw = process.env.SERV_MAX_COMPLETION_TOKENS ?? process.env.SERV_MAX_TOKENS;
+  if (raw == null || raw === "") return DEFAULT_MAX_COMPLETION_TOKENS;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 64) return DEFAULT_MAX_COMPLETION_TOKENS;
+  return Math.min(n, 16_000);
+}
 
 function stripFences(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -71,6 +81,7 @@ export class ServReasoningAdapter implements ReasoningAdapter {
         body: JSON.stringify({
           model: this.model,
           reasoning_effort: "low",
+          max_tokens: maxCompletionTokens(),
           messages: [
             { role: "system", content: args.system },
             { role: "user", content: args.user },

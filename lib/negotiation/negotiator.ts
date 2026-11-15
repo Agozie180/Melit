@@ -61,7 +61,7 @@ export const DecisionSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
-const DECISION_JSON_SCHEMA = {
+export const DECISION_JSON_SCHEMA = {
   type: "object",
   properties: {
     action: { type: "string", enum: ["offer", "accept", "walk"], description: "offer = propose offerPrice; accept = take the seller's current ask; walk = end without buying" },
