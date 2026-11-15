@@ -1,28 +1,102 @@
-# Melit
+# Melit — it haggles, then the server decides whether it may pay
 
-**A shopping agent with a budget, a negotiator's brain, and a savings vault.**
+**SERV Hackathon Edition 02.** Main track: Kite. Secondary: Reppo. Judged on creativity, user readiness, and revenue potential. The published prize pool is **$5,000 total**. Per-track amounts were still TBA on the event page on 15 Nov 2026, so this README does not invent a split.
 
-Melit is for people who don't know how to haggle or how to save. You give it two controls, both enforced in server code before every payment. The **shopping list** decides **what** it can buy: only the items you added, at or under each item's max price, while quantity is left. The **$300 rolling weekly cap** decides **how much** it can spend. It negotiates the price before it buys, buys only when the deal is good and both controls allow it, and moves what it saved into a visible Savings Vault. (The list and the ledger are held in your browser and signed by the server, so clearing them starts over; see [Known limitation](#how-the-spend-guard-works).)
+| | |
+| --- | --- |
+| Live app | https://melit.vercel.app |
+| This branch | Deploy it before judging. On 15 Nov 2026 the live URL was an older build with no shopping list. |
+| Demo | [demo.mp4](./demo.mp4) · shot list [demo.md](./demo.md) |
+| Write-up | [SUBMISSION.md](./SUBMISSION.md) |
+| Reproduce the checks | `npm test` |
 
-Built for **SERV Hackathon Edition 02**:
+> **The model may suggest a price. The server will not pay unless the item is on your signed list, quantity is left, the price is within that item's max, and the last 7 days plus this price is at most $300.**
 
-- **Kite track:** "agents with a verifiable identity and spending limits you control, so they can shop, book and pay on your behalf, safely."
-- **Reppo track:** Melit learns from feedback. Its owner, the sellers and Reppo's external evaluator panel each feed back into a bounded negotiation strategy. See [Reppo track](#reppo-track-melit-learns-from-feedback).
+People pay the sticker price because haggling is awkward and the money leaks out a little at a time. Melit negotiates with four mock sellers, shows the reasoning, and runs that check in server code before any payment. What it saved versus list price goes in a vault: 85% shown as yours, 15% as Melit's fee. That split is arithmetic. It is not a charge to a card.
+
+## What we built
+
+1. **A signed shopping list** of `{ name, maxPrice, quantity }`. That is what Melit can buy.
+2. **A $300 rolling 7-day cap.** That is how much it can spend. Both checks are in `authorizePurchase`, and a blocked result never calls a payment rail.
+3. **A negotiation.** Each round asks SERV Reasoning first. If the call fails or the JSON does not validate, the round is labelled **Fallback heuristic**.
+4. **An identity card** that says Passport sandbox only when `kpass` confirms it. On Vercel it shows the KiteAI testnet wallet and says it is not Passport-verified, or a labelled simulated id when there is no key.
+5. **A payment rail** that sends pieUSD on KiteAI testnet (chain 2368) when a throwaway key is set and the wallet can pay. A dry wallet, or no key, produces a receipt labelled Simulated or Recorded. `kpass` does not run on Vercel.
+6. **A learning loop.** Owner notes and seller reviews move a capped strategy. Reppo is called only when `REPPO_API_KEY` is set, and a score appears only after Reppo returns one.
+
+## How a purchase runs
+
+```text
+save list → server HMAC
+ask for an item
+  → each round: SERV Reasoning (or a labelled fallback) → code clamps the move
+  → off-list seller push: log "declined: not on your list" (no payment)
+deal price → authorizePurchase(list, ledger, price)
+  → allowed: payment rail → signed ledger row → vault
+  → blocked: stop. The rail is not called.
+```
+
+The file map is in [Architecture](#architecture).
+
+## What's used, and what's deliberately not
+
+| Surface | Used? | Evidence, or why not |
+| --- | --- | --- |
+| SERV Reasoning | Yes, when `OPENSERV_API_KEY` is set | `POST https://inference-api.openserv.ai/v1/chat/completions` in `lib/adapters/reasoning.ts`. Prompt `melit-negotiator-v3`. |
+| Kite track: spending limit you control | Yes, in server code | `lib/guard/spend-guard.ts` and `lib/server/shopping-list.ts`. The limit is per browser, not a Passport session, on the public deploy. |
+| Kite Passport | Only on a local machine with `kpass` | The public site cannot run the CLI. The card says so. |
+| pieUSD on KiteAI testnet (chain 2368) | When `AGENT_PRIVATE_KEY` is set and the wallet can pay | Recorded sample hashes live in `data/recorded-receipts.json`. A failed or unconfigured rail is labelled. |
+| Reppo Evaluation API | When `REPPO_API_KEY` is set | `lib/adapters/reppo.ts`. The UI does not invent a score. |
+| Dolphin | No | Melit does not call Dolphin models. |
+| Real shops | No | Four labelled mock sellers in `lib/market/catalog.ts`. Their hidden floor prices stay on the server. |
+
+## The thesis, enforced
+
+| The model may | The code will not |
+| --- | --- |
+| Offer, accept, or walk, and explain why | Pay for an item that is not on the signed list |
+| Name a price | Pay above that row's max, or after its quantity is used up |
+| Tell you to take a bundle | Pay for an off-list push. The log is `declined: not on your list` until you press **Approve and save** |
+| Ignore a seller who says "ignore your list" | Skip `authorizePurchase`. A blocked result returns before `deps.pay` |
+
+## Measured
+
+Numbers below are what the tests assert. Re-run the command rather than trusting this paragraph if the suite has moved.
+
+| Claim | What the test asserts | Reproduce |
+| --- | --- | --- |
+| $300.00 is allowed and $300.01 is blocked | `allowed === true` on the cap, then a reason matching `$0.01 over` | `npm test -- tests/spend-guard.test.ts` |
+| Off-list, over max, and used-up quantity are blocked | reasons match `not on your shopping list`, `above the $80.00 maximum`, `none are left` | `npm test -- tests/shopping-list.test.ts` |
+| A renamed ledger row cannot restore quantity | `signature mismatch`, purchase not allowed | same file, "item name was rewritten" |
+| A blocked purchase does not call the rail | the pay mock is not called | `npm test -- tests/payments.test.ts` |
+| The hidden floor is not in the SERV prompt | the user message does not match `/floor/i` | `npm test -- tests/negotiator.test.ts` |
+
+On 15 Nov 2026, `npm test` reported 87 passing tests.
+
+## Try it in 30 seconds
+
+No API key is required. Without one, the banner says so and every round is labelled **Fallback heuristic**. Payments are then labelled Simulated.
+
+1. Open the app and do not save a list yet.
+2. Press **Wireless Earbuds**, then **Negotiate and buy**. Melit declines. No payment runs.
+3. Add Wireless Earbuds, max `$120`, quantity `1`, and press **Save list**. The badge says **signed** and the row says **waiting**.
+4. Negotiate again. The Bluetooth Speaker flash deal logs `declined: not on your list`. **Add to list?** does nothing until **Approve and save**.
+5. Press **Try to overspend**. If money is left and the chair is not on the list, the block names the list. To show the weekly cap, add Espresso Machine Pro with max `$349`, save, and press **Try to overspend** again.
+
+## Limitations, stated plainly
+
+- The list and the ledger live in this browser. **Reset demo**, or clearing storage, starts the week over and restores quantities. On the public demo every visitor is paid from one shared testnet wallet, so both controls are per browser.
+- `POST /api/shopping-list` signs any valid rows. The signature proves this server saw them. It does not prove which person approved them.
+- Rate limits live in each serverless instance. A burst can land on more than one instance. See [Abuse limits](#how-the-spend-guard-works).
+- `kpass` cannot run on Vercel, so the live identity is not a Passport check.
+- The 15% line in the vault is not money collected from anyone.
+
+## Non-goals
+
+Not a store, not a card product, not a Dolphin model, and not a Passport-verified agent on the public deploy. Seller floors stay server-side. The model is not the spend authority.
 
 ## The problem
 
 Most people pay the list price. They don't negotiate because it's awkward, and they don't save because the money leaks out a little at a time. Shopping agents could fix both, but handing an AI your card is scary. You need an agent that bargains hard, explains every decision, and has a hard budget check in code before every payment.
-
-## What Melit does
-
-1. **Agent identity.** The Melit Agent ID card shows the agent's identifier, spending limit and status. It says **Passport sandbox** only when `kpass` confirms a registered sandbox agent at that moment. Otherwise it shows the agent's KiteAI testnet wallet ("not Passport-verified") or a labelled simulated ID.
-2. **Negotiates before it buys.** Each round, SERV Reasoning decides whether to offer, accept or walk away, and returns the reasoning steps, which are shown in the UI.
-3. **Buys only good deals.** The deal must be at or under your max price and pass the Spend Guard.
-4. **Saves the difference.** `saved = list price - paid price` goes into the Savings Vault.
-5. **Shopping list (what it can buy).** You edit an allowlist of `{ name, maxPrice, quantity }`. A purchase is blocked unless that item is on the signed list, quantity is left, and the price is at or under `maxPrice`. Sellers sometimes push bundles and flash deals; Melit declines anything off the list and logs why. Adding it takes an explicit approval.
-6. **Hard weekly cap (how much it can spend).** The same Spend Guard blocks any payment that would push the last 7 days over $300, with a plain-English reason.
-7. **Pays on KiteAI testnet.** Approved purchases are paid in pieUSD on KiteAI testnet (chain 2368). It tries the Kite Passport sandbox first and falls back to a direct testnet transfer. Each ledger row records the rail that paid and links the transaction on KiteScan.
-8. **Learns from feedback.** A strategy profile (aggressiveness, walk-away limit, priority, notes) is sent with every negotiation. You can rate each deal, sellers review Melit, and Reppo judges each purchase. Each source changes the strategy by a small, capped step.
 
 ## How SERV Reasoning is used
 

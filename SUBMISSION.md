@@ -2,7 +2,7 @@
 
 **Main track:** Kite. **Secondary:** Reppo.
 
-**Repo:** https://github.com/Agozie180/Melit
+**Repo:** https://github.com/Agozie180/Melit · **Judge's sheet:** [README.md](./README.md) (thesis, what is used, what is measured, limitations)
 
 **Demo:** deploy this branch before judging. On 15 Nov 2026, https://melit.vercel.app was an older build. Its page had no shopping list. The preview for this branch was behind Vercel SSO, so this audit did not click through it.
 

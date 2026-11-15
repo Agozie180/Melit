@@ -102,7 +102,7 @@ export function ShoppingListCard({
 
       {rows.length === 0 ? (
         <p className="mt-3 rounded-xl border border-dashed border-black/10 p-3 text-sm text-neutral-500">
-          Nothing here yet. Melit will decline every purchase until you add an item and save.
+          Nothing here yet. Press Negotiate and buy before you save if you want to see the refusal. Melit declines every purchase until you add an item and save.
         </p>
       ) : (
         <ul className="mt-3 space-y-2">

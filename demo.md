@@ -33,6 +33,8 @@ Negotiate the earbuds. The seller pushes a Bluetooth Speaker flash deal. It is l
 
 > Now it can negotiate. Every move is a SERV Reasoning call. The seller pushes a speaker that is not on the list, and Melit refuses it until I approve.
 
+The line above is what the cut says. The badge on screen is the check: **SERV Reasoning** means that round called SERV, **Fallback heuristic** means it did not. A round with the fallback badge makes "every move" too strong.
+
 ### 5. Guard, payment, bought (0:49–1:03)
 
 The green receipt: Spend Guard approved, direct testnet transfer, pieUSD amount, KiteScan link. The vault shows yours at 85%. The earbuds row turns **bought**.
