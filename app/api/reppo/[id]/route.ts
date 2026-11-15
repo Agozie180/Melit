@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ReppoError, getReppoClient } from "@/lib/adapters/reppo";
+import { verdictIsReady } from "@/lib/learning/reppo-verdict";
 import { checkRateLimit, withRemaining } from "@/lib/server/rate-limit";
 
 const IdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
@@ -23,7 +24,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         error: evaluation.error,
         input: evaluation.input,
         verifyUrl,
-        terminal: evaluation.status === "COMPLETED" || evaluation.status === "FAILED",
+        terminal: (evaluation.status === "COMPLETED" && verdictIsReady(evaluation.verdict)) || evaluation.status === "FAILED",
       }),
       remaining,
     );

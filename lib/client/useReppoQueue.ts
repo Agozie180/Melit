@@ -57,13 +57,7 @@ export function useReppoQueue(enabled: boolean) {
               error: string | null;
               terminal?: boolean;
             }>(`/api/reppo/${encodeURIComponent(action.job.evalId)}`);
-            if (res.status === "COMPLETED" && !res.verdict) {
-              reppoJobsStore.set((jobs) =>
-                markError(jobs, action.job.dealId, "Reppo marked COMPLETED without a verdict payload.", false, Date.now()),
-              );
-            } else {
-              reppoJobsStore.set((jobs) => markPolled(jobs, action.job.dealId, res, Date.now()));
-            }
+            reppoJobsStore.set((jobs) => markPolled(jobs, action.job.dealId, res, Date.now()));
           } catch (err) {
             const e = err as Error & { retryable?: boolean };
             reppoJobsStore.set((jobs) => markError(jobs, action.job.dealId, e.message, e.retryable ?? true, Date.now()));

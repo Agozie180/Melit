@@ -6,6 +6,7 @@ import { proposeOwnerUpdate, proposeReppoUpdate } from "@/lib/learning/feedback"
 import { applyBoundedUpdate, parseProfile } from "@/lib/learning/profile";
 import { buildReppoInput } from "@/lib/learning/reppo-input";
 import type { FeedbackResponse, LearningEvent } from "@/lib/learning/types";
+import { verdictIsReady } from "@/lib/learning/reppo-verdict";
 import { verifyDealSummary } from "@/lib/server/deal-summary";
 import { checkRateLimit, withRemaining } from "@/lib/server/rate-limit";
 
@@ -64,8 +65,17 @@ export async function POST(req: Request) {
     const e = err as ReppoError;
     return Response.json({ error: e.message, retryable: e.retryable ?? true }, { status: 502 });
   }
-  if (evaluation.status !== "COMPLETED" || !evaluation.verdict) {
-    return Response.json({ error: `Reppo evaluation is ${evaluation.status}, not COMPLETED.`, retryable: evaluation.status !== "FAILED" }, { status: 409 });
+  if (evaluation.status !== "COMPLETED" || !verdictIsReady(evaluation.verdict)) {
+    return Response.json(
+      {
+        error:
+          evaluation.status === "COMPLETED"
+            ? "Reppo marked the evaluation COMPLETED but has not returned score/route yet."
+            : `Reppo evaluation is ${evaluation.status}, not COMPLETED.`,
+        retryable: evaluation.status !== "FAILED",
+      },
+      { status: 409 },
+    );
   }
   const expectedInput = buildReppoInput(summary);
   if (evaluation.input === null || evaluation.input !== expectedInput) {
