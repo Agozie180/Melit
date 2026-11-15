@@ -7,6 +7,8 @@ import { z } from "zod";
 import type { NegotiationDecision, Priority, PublicItem } from "../types";
 import { centsToDollars, dollarsToCents } from "../money";
 import type { ReasoningAdapter } from "../adapters/reasoning";
+import { DEFAULT_PROFILE, type StrategyProfile } from "../learning/profile";
+import type { SellerReputation } from "../learning/types";
 
 export interface HistoryTurn {
   round: number;
@@ -26,6 +28,21 @@ export interface NegotiationContext {
   remainingBudgetCents: number;
   userMaxPriceCents: number;
   priority: Priority;
+  /** Learned strategy (defaults to the untouched profile). */
+  profile?: StrategyProfile;
+  /** Melit's reputation with this seller, from the sellers' own reviews. */
+  reputation?: SellerReputation;
+}
+
+/** Lower of the user's max price and remaining weekly budget. Never negotiable. */
+export function hardCeiling(ctx: NegotiationContext): number {
+  return Math.min(ctx.userMaxPriceCents, ctx.remainingBudgetCents);
+}
+
+/** Highest final price the learned strategy will pay: walkAwayThreshold x market reference. */
+export function walkAwayCents(ctx: NegotiationContext): number {
+  const profile = ctx.profile ?? DEFAULT_PROFILE;
+  return Math.floor((ctx.item.marketReferenceCents * profile.walkAwayThreshold) / 100) * 100;
 }
 
 export const DecisionSchema = z.object({
@@ -48,23 +65,38 @@ const DECISION_JSON_SCHEMA = {
 } as const;
 
 export const SYSTEM_PROMPT = `You are Melit, a careful shopping agent negotiating on behalf of a user who is not good at haggling or saving.
-Prompt version: melit-negotiator-v1.
+Prompt version: melit-negotiator-v2.
 
 Objective: get the item for the lowest reasonable price without losing a good deal, then let the savings go to the user's vault.
 
 Decision priorities:
 1. Never recommend paying more than hardCeilingUsd (the lower of the user's max price and their remaining weekly budget). Code enforces this anyway.
-2. If priority is "save": open well below the market reference, raise offers in small steps, and be willing to walk if the seller will not come near the market reference.
-3. If priority is "fast": open close to the market reference and accept quickly once the ask is at or below the market reference.
-4. Offers must never go down between rounds and must be below the current ask (otherwise choose "accept").
-5. Treat "this is my last price" claims with skepticism if the seller has kept conceding.
-6. On the final round, accept if the current ask is within hardCeilingUsd and fair versus the market reference; otherwise make your best final offer or walk.
+2. Never accept above walkAwayPriceUsd (the owner's learned walk-away limit). Code enforces this too.
+3. If priority is "save": open well below the market reference, raise offers in small steps, and be willing to walk if the seller will not come near the market reference.
+4. If priority is "fast": open close to the market reference and accept quickly once the ask is at or below the market reference.
+5. Offers must never go down between rounds and must be below the current ask (otherwise choose "accept").
+6. Treat "this is my last price" claims with skepticism if the seller has kept conceding.
+7. On the final round, accept if the current ask is within both limits and fair versus the market reference; otherwise make your best final offer or walk.
+
+Learned strategy (strategyProfile in the user message, learned from owner feedback, seller reviews and external evaluation):
+- aggressiveness 0..1 sets how far below the market reference to open and how slowly to raise: about 0.2 means open near 90% of market, 0.5 near 75%, 0.8 near 65%. suggestedOpeningOfferUsd is computed from it.
+- profilePriority is the owner's standing preference ("save" = maximise savings, "speed" = close in fewer rounds). The per-request userPriority wins if they disagree.
+- notes are the owner's own lessons. Follow them unless they conflict with the hard limits.
+- sellerReputation is how this market rates Melit. A low average rating means sellers concede less and hold out for more; avoid insulting lowball offers when the rating is low, because that makes later deals worse.
+Mention in your reasoning which learned setting or note influenced the move when one did.
 
 Output rules: respond only with the JSON object required by the schema. offerPrice is in US dollars with at most 2 decimals. For "accept" set offerPrice to the current ask; for "walk" set it to 0. reasoning is 2-5 short plain-English steps the user will read. confidence is 0 to 1.
 Do not do arithmetic you do not need: the user message already includes the computed gaps and ceilings.`;
 
-function buildUserMessage(ctx: NegotiationContext): string {
-  const ceiling = Math.min(ctx.userMaxPriceCents, ctx.remainingBudgetCents);
+/** Opening share of the market reference implied by aggressiveness and priority. */
+export function openingShare(aggressiveness: number, priority: Priority): number {
+  return priority === "save" ? 0.86 - 0.24 * aggressiveness : 0.95 - 0.12 * aggressiveness;
+}
+
+export function buildUserMessage(ctx: NegotiationContext): string {
+  const ceiling = hardCeiling(ctx);
+  const profile = ctx.profile ?? DEFAULT_PROFILE;
+  const walkAway = walkAwayCents(ctx);
   const lastOffer = [...ctx.history].reverse().find((h) => h.melitAction === "offer");
   const payload = {
     item: ctx.item.name,
@@ -84,6 +116,24 @@ function buildUserMessage(ctx: NegotiationContext): string {
     remainingWeeklyBudgetUsd: centsToDollars(ctx.remainingBudgetCents),
     hardCeilingUsd: centsToDollars(ceiling),
     currentAskWithinCeiling: ctx.currentAskCents <= ceiling,
+    walkAwayPriceUsd: centsToDollars(walkAway),
+    currentAskWithinWalkAway: ctx.currentAskCents <= walkAway,
+    strategyProfile: {
+      aggressiveness: profile.aggressiveness,
+      walkAwayThresholdOfMarket: profile.walkAwayThreshold,
+      profilePriority: profile.priority,
+      notes: profile.notes,
+      updatesApplied: profile.version,
+    },
+    suggestedOpeningOfferUsd: centsToDollars(Math.round(ctx.item.marketReferenceCents * openingShare(profile.aggressiveness, ctx.priority))),
+    sellerReputation: ctx.reputation
+      ? {
+          averageRating: ctx.reputation.avgRating,
+          reviews: ctx.reputation.reviews,
+          basedOn: ctx.reputation.sellerId ? "this seller's reviews" : ctx.reputation.reviews ? "market-wide reviews" : "no reviews yet",
+          sellerWillingness: ctx.reputation.willingness,
+        }
+      : null,
     history: ctx.history.map((h) => ({
       round: h.round,
       melit: h.melitAction === "offer" ? `offered $${centsToDollars(h.melitOfferCents)}` : h.melitAction,
@@ -97,10 +147,12 @@ function buildUserMessage(ctx: NegotiationContext): string {
 
 /** Deterministic fallback used when SERV is unavailable or returns invalid output. */
 export function heuristicDecision(ctx: NegotiationContext): Omit<NegotiationDecision, "source" | "guardrails" | "fallbackReason"> {
-  const ceiling = Math.min(ctx.userMaxPriceCents, ctx.remainingBudgetCents);
+  const profile = ctx.profile ?? DEFAULT_PROFILE;
+  const ceiling = Math.min(hardCeiling(ctx), walkAwayCents(ctx));
   const market = ctx.item.marketReferenceCents;
   const step = ctx.round - 1;
-  const targetShare = ctx.priority === "save" ? 0.72 + 0.07 * step : 0.88 + 0.05 * step;
+  const stepShare = ctx.priority === "save" ? 0.09 - 0.05 * profile.aggressiveness : 0.05;
+  const targetShare = openingShare(profile.aggressiveness, ctx.priority) + stepShare * step;
   const acceptBelow = ctx.priority === "save" ? market * 0.95 : market * 1.02;
   const target = Math.min(ceiling, Math.round(market * targetShare));
   const final = ctx.round >= ctx.maxRounds;
@@ -120,7 +172,7 @@ export function heuristicDecision(ctx: NegotiationContext): Omit<NegotiationDeci
     action: "offer",
     offerPriceCents: target,
     reasoning: [
-      `Heuristic: offer ${Math.round(targetShare * 100)}% of the market reference price.`,
+      `Heuristic: offer ${Math.round(targetShare * 100)}% of the market reference price (aggressiveness ${profile.aggressiveness.toFixed(2)}).`,
       final ? "Final round: this is my best offer." : "Raise the offer a little each round.",
     ],
     confidence: 0.5,
@@ -133,11 +185,14 @@ export function applyGuardrails(
   d: Omit<NegotiationDecision, "guardrails">,
 ): NegotiationDecision {
   const guardrails: string[] = [];
-  const ceiling = Math.min(ctx.userMaxPriceCents, ctx.remainingBudgetCents);
+  const hard = hardCeiling(ctx);
+  const walkAway = walkAwayCents(ctx);
+  const ceiling = Math.min(hard, walkAway);
+  const limitName = walkAway < hard ? "learned walk-away limit" : "hard ceiling";
   const lastOffer = [...ctx.history].reverse().find((h) => h.melitAction === "offer")?.melitOfferCents ?? 0;
   let { action, offerPriceCents } = d;
 
-  if (ceiling <= 0 && action !== "walk") {
+  if (hard <= 0 && action !== "walk") {
     guardrails.push("No room under the user's max price or weekly budget: walking away.");
     return { ...d, action: "walk", offerPriceCents: 0, guardrails };
   }
@@ -145,11 +200,11 @@ export function applyGuardrails(
   if (action === "accept") {
     if (ctx.currentAskCents > ceiling) {
       if (ctx.round < ctx.maxRounds) {
-        guardrails.push(`Ask is above the hard ceiling, so the accept became an offer at the ceiling.`);
+        guardrails.push(`Ask is above the ${limitName}, so the accept became an offer at that limit.`);
         action = "offer";
         offerPriceCents = ceiling;
       } else {
-        guardrails.push("Ask is above the hard ceiling on the final round: walking away.");
+        guardrails.push(`Ask is above the ${limitName} on the final round: walking away.`);
         return { ...d, action: "walk", offerPriceCents: 0, guardrails };
       }
     } else {
@@ -159,7 +214,7 @@ export function applyGuardrails(
 
   if (action === "offer") {
     if (offerPriceCents > ceiling) {
-      guardrails.push("Offer was above the hard ceiling and was lowered to it.");
+      guardrails.push(`Offer was above the ${limitName} and was lowered to it.`);
       offerPriceCents = ceiling;
     }
     if (offerPriceCents < lastOffer) {
