@@ -2,7 +2,7 @@
 
 The script a presenter reads. It leads with the refusal, because that is the moment a judge cannot fake by watching a happy path.
 
-Use a deploy of this branch. The public URL on 15 Nov 2026 did not contain the shopping list. Say what is simulated out loud. Do not promise a KiteScan link, a Passport checkmark, or a Reppo score unless that thing is on the screen.
+Use https://melit.vercel.app/ (or a deploy of this branch). That URL includes the shopping list and Spend Guard as of 15 Nov 2026. Say what is simulated out loud. Do not promise a KiteScan link, a Passport checkmark, or a Reppo score unless that thing is on the screen.
 
 ## Setup, before the clock
 

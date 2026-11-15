@@ -84,7 +84,7 @@ The page does not say how many points each axis is worth. This is the evidence a
 
 **Creativity.** Two controls with different jobs: a signed allowlist (what it can buy) and a rolling $300 week (how much). Off-list seller pushes are declined until the owner presses **Approve and save**. The sellers are four scripts in `lib/market/catalog.ts`. That is a specific mechanism, not a general chatbot, and it is not a real shop.
 
-**User readiness.** The app has an empty list, a loading line (`payments: checking…` until `/api/agent` returns), a blocked card, and a 390px layout that does not overflow horizontally. A judge can run it with no API key. Early on 15 Nov 2026, https://melit.vercel.app served an older build with no shopping list. After `main` moved to `7af69c8`, a fetch of that URL contained "Shopping list". The card on that deploy is still a testnet wallet, `verified: false`.
+**User readiness.** The app has an empty list, a loading line (`payments: checking…` until `/api/agent` returns), a blocked card, and a layout that fits a ~390px phone width without horizontal overflow (checked 15 Nov 2026). A judge can run it with no API key. https://melit.vercel.app/ serves the shopping list; negotiation rounds show **SERV Reasoning** or **Fallback heuristic** per round. The card is still a testnet wallet, `verified: false`.
 
 **Revenue potential.** The vault shows 85% of (list price − paid price) as the owner's share and 15% as Melit's fee. `splitSavings` in `lib/money.ts` is that arithmetic. No shopper and no merchant is charged. The fee is not collected on chain.
 
@@ -92,5 +92,5 @@ The page does not say how many points each axis is worth. This is the evidence a
 
 - A weighting between the three criteria.
 - A dollar amount for the Kite track or the Reppo track.
-- That the public URL on 15 Nov 2026 already contained the shopping list.
+- That Reppo has returned a live verdict during your demo unless the UI shows one.
 - That Reppo has returned a score for a purchase on that URL. The live `/api/agent` response reported `reppo.configured: true`. A verdict body was not fetched.
