@@ -33,7 +33,7 @@ export const execKpass: KpassRunner = (args) =>
   new Promise((resolve) => {
     execFile(
       kpassBinary(),
-      [...args, "--output", "json", "--no-interactive"],
+      [...args, ...(process.env.KPASS_BASE_URL ? ["--base-url", process.env.KPASS_BASE_URL] : []), "--output", "json", "--no-interactive"],
       {
         shell: false,
         timeout: EXECUTE_TIMEOUT_MS,
