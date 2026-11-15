@@ -23,6 +23,11 @@ export const LIMITS = {
   overspend: [{ perClient: 20, global: 300, windowMs: 60_000 }],
   // Signing a list is cheap, but it is still an owner action worth bounding.
   "shopping-list": [{ perClient: 30, global: 300, windowMs: 60_000 }],
+  // Reppo evals cost credits; poll is cheap but still bounded.
+  reppo: [
+    { perClient: 6, global: 40, windowMs: 60_000 },
+    { perClient: 30, global: 200, windowMs: 60 * 60_000 },
+  ],
 } satisfies Record<string, LimitRule[]>;
 
 type Bucket = { start: number; count: number };

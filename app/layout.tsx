@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Melit: the shopping agent that negotiates and saves",
   description:
-    "Melit negotiates before it buys, buys only what is on your shopping list, blocks any payment over a $300 rolling 7-day budget, and moves what it saved into your vault. Powered by SERV Reasoning.",
+    "Melit negotiates before it buys, buys only what is on your signed shopping list, blocks any payment over a $300 rolling 7-day budget, and moves what it saved into your vault. Each round calls SERV Reasoning, labelled in the feed.",
 };
 
 export const viewport: Viewport = {

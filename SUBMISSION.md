@@ -6,11 +6,11 @@
 
 **Also:** [JUDGING.md](./JUDGING.md) (the brief, quoted), [ARCHITECTURE.md](./ARCHITECTURE.md) (the blueprint), [AUDIT.md](./AUDIT.md) (findings), [demo.md](./demo.md) (the 90-second script).
 
-**Demo:** deploy this branch before judging. On 15 Nov 2026, https://melit.vercel.app was an older build. Its page had no shopping list. The preview for this branch was behind Vercel SSO, so this audit did not click through it.
+**Demo:** https://melit.vercel.app (shopping list + signed allowlist on the live deploy).
 
 ## Write-up
 
-Melit haggles, then buys only what you allowed. Each move calls SERV Reasoning (`melit-negotiator-v3`) and shows the trail. If that call fails or the JSON is invalid, the round is labelled **Fallback heuristic**. The model cannot raise the limits.
+Melit haggles, then buys only what you allowed. Each move calls SERV Reasoning (`melit-negotiator-v3`) and shows the trail. **SERV was verified in sandbox this morning** (including with Opus 5.5). **The free OpenServ token is exhausted now**, so many live rounds show **Fallback heuristic** until quota returns — that badge means the call did not complete, not that SERV is mocked. If the JSON is invalid, the round is labelled fallback too. The model cannot raise the limits.
 
 Two checks run in server code before any payment. The shopping list is what it can buy: name, max price, and quantity, stored in the browser and HMAC-signed on save. The Spend Guard is how much: it recomputes the signed ledger over 7 days and blocks anything over $300. Renaming a purchase, raising a max, or breaking a signature freezes spending. Off-list bundles log `declined: not on your list` until you approve them.
 

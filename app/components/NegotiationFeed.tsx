@@ -177,7 +177,7 @@ function RunView({
         })}
         {run.running && (
           <li className="flex items-center gap-2 text-sm text-neutral-500">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500" /> Melit is thinking with SERV Reasoning…
+            <span className="h-2 w-2 animate-pulse rounded-full bg-violet-500" /> Melit is deciding this round (SERV Reasoning first)…
           </li>
         )}
       </ul>
