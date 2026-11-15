@@ -2,10 +2,11 @@ import { z } from "zod";
 import { runShopping } from "@/lib/negotiation/run";
 import { getReasoningAdapter } from "@/lib/adapters/reasoning";
 import { ndjsonResponse } from "@/lib/server/stream";
-import { parseProfile } from "@/lib/learning/profile";
-import { appendLedgerEntry, loadDemoState } from "@/lib/server/demo-state";
+import { loadDemoState } from "@/lib/server/demo-state";
+import { purchaseHooks } from "@/lib/server/purchase-scope";
 import { checkRateLimit, withRemaining } from "@/lib/server/rate-limit";
-import { sessionIdFromRequest } from "@/lib/server/request-session";
+import { financialScopeFromRequest } from "@/lib/server/request-session";
+import { parseProfile } from "@/lib/learning/profile";
 
 /** Passport session execute can take several minutes on x402 settle. */
 export const maxDuration = 300;
@@ -30,15 +31,14 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid request: give an item, a max price and a priority." }, { status: 400 });
   }
   const { request, profile, reviews } = body.data;
-  const sid = sessionIdFromRequest(req);
-  const stored = sid ? await loadDemoState(sid) : { ledger: [], list: null };
-  const ledger = stored.ledger.length > 0 ? stored.ledger : body.data.ledger;
-  const list = stored.list ?? body.data.list;
+  const scopeId = financialScopeFromRequest(req);
+  const stored = scopeId ? await loadDemoState(scopeId) : { ledger: [], list: null, ledgerIntegrity: "ok" as const, pending: [], version: 0 };
+  const ledger = scopeId ? stored.ledger : body.data.ledger;
+  const list = scopeId ? (stored.list ?? body.data.list) : body.data.list;
+  const hooks = scopeId ? purchaseHooks(scopeId, list) : {};
   return withRemaining(
     ndjsonResponse(
-      runShopping(request, ledger, getReasoningAdapter(), undefined, { profile: parseProfile(profile), reviews }, list, {
-        onLedgerAppend: sid ? (entry) => appendLedgerEntry(sid, entry) : undefined,
-      }),
+      runShopping(request, ledger, getReasoningAdapter(), undefined, { profile: parseProfile(profile), reviews }, list, hooks),
     ),
     remaining,
   );

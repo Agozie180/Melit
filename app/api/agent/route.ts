@@ -33,7 +33,11 @@ export async function GET() {
       testnetScale: testnetScale(),
     },
     reasoning: { provider: reasoner.provider, model: reasoner.model, configured: reasoner.configured },
-    reppo: { configured: getReppoClient().configured, taskType: "action" },
+    reppo: {
+      configured: getReppoClient().configured,
+      baseUrl: process.env.REPPO_BASE_URL?.replace(/\/+$/, "") || "https://eval.reppo.xyz/api/v1",
+      taskType: "action",
+    },
     capCents: WEEKLY_CAP_CENTS,
     feeRate: MELIT_FEE_RATE,
     catalog: publicCatalog(),

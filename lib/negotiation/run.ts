@@ -40,8 +40,12 @@ export interface LearningInput {
 }
 
 export interface RunHooks {
+  /** Re-checks Spend Guard under server lock immediately before calling a payment rail. */
+  onBeforePay?: (order: PaymentOrder) => Promise<void>;
   /** Persists a signed ledger row after payment; runs before the purchased event is streamed. */
-  onLedgerAppend?: (entry: LedgerEntry) => Promise<void>;
+  onLedgerAppend?: (entry: LedgerEntry, order: PaymentOrder) => Promise<void>;
+  /** Drops a reserved in-flight row when payment fails. */
+  onPaymentFailed?: (order: PaymentOrder) => Promise<void>;
 }
 
 export async function* runShopping(
@@ -315,10 +319,30 @@ export async function* purchase(
     priceCents,
   };
 
+  try {
+    if (hooks.onBeforePay) await hooks.onBeforePay(order);
+  } catch (err) {
+    yield {
+      type: "blocked",
+      guard: {
+        allowed: false,
+        reason: (err as Error).message.startsWith("Blocked:") ? (err as Error).message : `Blocked: ${(err as Error).message}`,
+        spentInWindowCents: 0,
+        remainingCents: 0,
+        attemptedCents: priceCents,
+        capCents: guard.capCents,
+      },
+      item,
+      priceCents,
+    };
+    return;
+  }
+
   let receipt: PaymentReceipt;
   try {
     receipt = await deps.pay(order);
   } catch (err) {
+    await hooks.onPaymentFailed?.(order);
     const attempts = err instanceof PaymentFailedError ? err.attempts : [];
     yield {
       type: "payment-failed",
@@ -353,7 +377,16 @@ export async function* purchase(
     explorerUrl: receipt.explorerUrl,
     testnetAmount: receipt.testnetAmount ? `${receipt.testnetAmount} ${receipt.asset ?? ""}`.trim() : null,
   });
-  if (hooks.onLedgerAppend) await hooks.onLedgerAppend(entry);
+  try {
+    if (hooks.onLedgerAppend) await hooks.onLedgerAppend(entry, order);
+  } catch (err) {
+    await hooks.onPaymentFailed?.(order);
+    yield {
+      type: "error",
+      message: `Payment succeeded but the ledger could not be updated: ${(err as Error).message}. Contact support with receipt ${receipt.receiptId}.`,
+    };
+    return;
+  }
   yield { type: "purchased", entry, receipt, guard };
 }
 

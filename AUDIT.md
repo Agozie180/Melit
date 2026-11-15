@@ -30,9 +30,21 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 **Live check (15 Nov 2026).** `POST /api/negotiate` on https://melit.vercel.app after saving a shopping list returned negotiation rounds with `"source":"serv"`.
 
+### A4. Remaining audit hardening (15 Nov 2026 night)
+
+**Fail-closed financial state.** `lib/server/demo-state.ts` no longer strips invalid ledgers to `[]`. Corrupt rows stay in storage with `ledgerIntegrity: "invalid"`; `GET /api/state` exposes `ledgerLocked` and spending stays blocked until **Reset demo**. **Tests:** `tests/demo-state.test.ts`.
+
+**Concurrent purchases.** Reserve/finalize hooks in `lib/server/purchase-scope.ts` run under `withScopeLock` in `lib/server/kv.ts`, counting in-flight rows against the cap and quantity before pay. **Tests:** `tests/concurrent-purchase.test.ts`.
+
+**Budget scope across sessions.** `melit_budget` cookie + `X-Melit-Budget` / `localStorage` scope ledger storage so a fresh `melit_sid` does not reset the $300 week. **Tests:** `tests/budget-scope.test.ts`, `npm run smoke:browser` (https://melit.vercel.app).
+
+**Passport merchant allowlist (code path).** `lib/kite/sandbox-merchant.ts` tries more register/allowlist/status commands before execute; **Tests:** `tests/payments.test.ts` (“registers the merchant host before session execute”), `tests/kpass-settlement.test.ts`.
+
+**Reppo configuration.** `/api/agent` returns `reppo.baseUrl` with `configured`; `npm run verify:reppo` polls a live eval when `REPPO_API_KEY` is set. **Tests:** `tests/reppo-config.test.ts`.
+
 ## Open
 
-### B0. Passport on Vercel (Rail 1)
+### B0. Passport on Vercel (Rail 1) — merchant allowlist (ops)
 
 **Path added 15 Nov 2026 evening.** `scripts/download-kpass.mjs` installs `vendor/kpass-linux-amd64` at build. `KPASS_RUNTIME_BUNDLE_B64` (from `npm run kite:export-runtime`) materializes `~/.kite-passport` into `/tmp` via `lib/kite/kpass-runtime.ts` (npm `tar` package on Vercel — no system `tar` binary). `MELIT_KPASS=1` or the bundle env enables Rail 1. **Production (15 Nov 2026 night):** Vercel has the bundle, session (`agent_session_01a1e10c-338d-7698-b16c-a2218d24880b`, 30-day TTL), and `SELLER_BASE_URL`; `GET https://melit.vercel.app/api/agent` returns `passport.runtimeReady: true`. **Still blocks Rail 1 settlement:** Kite merchant allowlist (`sandbox_merchant_not_allowlisted`) until `https://melit.vercel.app` is listed. The dashboard card may still say testnet wallet if serverless `kpass agent status` does not confirm in that request. **Test:** `tests/kpass-runtime.test.ts`, `npm run download:kpass`, `npm run smoke:browser` (prod build).
 
