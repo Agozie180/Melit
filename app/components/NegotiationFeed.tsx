@@ -33,7 +33,7 @@ function RoundView({ round }: { round: NegotiationRound }) {
         <span className="font-semibold">Melit {actionLabel.toLowerCase()}</span>
         <span className="ml-auto flex gap-1.5">
           {d.source === "serv" ? <Badge tone="violet">SERV Reasoning</Badge> : <Badge tone="amber">Fallback heuristic</Badge>}
-          <Badge>{Math.round(d.confidence * 100)}% sure</Badge>
+          <Badge>{Math.round((d.confidence ?? 0) * 100)}% sure</Badge>
         </span>
       </div>
 

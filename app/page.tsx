@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { FeedEvent, ShoppingRequest } from "@/lib/types";
 import { spentInWindow } from "@/lib/guard/spend-guard";
 import { WEEKLY_CAP_CENTS } from "@/lib/money";
-import { clockStore, fetchAgentInfo, ledgerStore, streamEvents, type AgentInfo } from "@/lib/client/api";
+import { clockStore, fetchAgentInfo, ledgerStore, resetDemoLedger, streamEvents, syncFinancialState, type AgentInfo } from "@/lib/client/api";
 import { AgentCard } from "./components/AgentCard";
 import { BudgetGauge } from "./components/BudgetGauge";
 import { VaultCard } from "./components/VaultCard";
@@ -55,6 +55,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchAgentInfo().then(setInfo, (e: Error) => setInfoError(e.message));
+    syncFinancialState().catch(() => {
+      /* first visit may 429; state syncs on next save or purchase */
+    });
   }, []);
 
   const capCents = info?.capCents ?? WEEKLY_CAP_CENTS;
@@ -82,6 +85,7 @@ export default function Dashboard() {
       const push = (e: FeedEvent) => {
         if (e.type === "purchased") {
           ledgerStore.append(e.entry);
+          void syncFinancialState().catch(() => undefined);
         }
         if (e.type === "declined-offer") {
           declinedStore.add(e.offer);
@@ -123,7 +127,7 @@ export default function Dashboard() {
   const shop = (request: ShoppingRequest) => run("shop", "/api/negotiate", { request });
   const overspend = () => run("overspend", "/api/overspend", {});
   const reset = () => {
-    ledgerStore.clear();
+    void resetDemoLedger();
     declinedStore.clear();
     setRuns([]);
   };
@@ -143,7 +147,7 @@ export default function Dashboard() {
             Melit<span className="text-emerald-600">.</span>
           </h1>
           <p className="mt-1 max-w-md text-sm text-neutral-600">
-            A shopping agent with a budget, a negotiator&apos;s brain and a savings vault. It haggles before it buys. The shopping list decides what it can buy, and the server blocks any payment that would take your signed 7-day ledger over $300.
+            A shopping agent with a budget, a negotiator&apos;s brain and a savings vault. It haggles before it buys. The shopping list decides what it can buy, and the server holds your signed ledger and blocks any payment that would take the rolling 7-day total over $300.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
             Kite + Reppo tracks · Mock sellers · payments: {paymentsLabel} · decisions by SERV Reasoning ·{" "}

@@ -94,6 +94,16 @@ if (agentWallet) {
 
 kpass(["agent", "register", "--type", agentType], { allowFail: true });
 
+const sellerHost = argValue("--seller-host") ?? process.env.SELLER_BASE_URL;
+if (sellerHost) {
+  let host = sellerHost;
+  try {
+    host = new URL(sellerHost.startsWith("http") ? sellerHost : `https://${sellerHost}`).host;
+  } catch {}
+  kpass(["sandbox", "merchant", "register", "--host", host], { allowFail: true });
+  kpass(["merchant", "register", "--url", sellerHost.replace(/\/+$/, "")], { allowFail: true });
+}
+
 const session = kpass(
   [
     "session",

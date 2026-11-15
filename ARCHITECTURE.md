@@ -48,7 +48,7 @@ Design with these. Do not route around them.
 | SERV Reasoning is an OpenAI-compatible chat completion | `lib/adapters/reasoning.ts` posts with `reasoning_effort: "low"`, strict `json_schema`, and `max_completion_tokens: 2048` | No vendor SDK. A timeout is 25 seconds. Failure becomes a labelled fallback. |
 | Vercel cannot run `kpass` | The live `/api/agent` response on 15 Nov 2026 had `status: "testnet-wallet"` and rails `direct-testnet` and `simulated`. Passport was not in the rail list. | `kpassEnabled()` is `MELIT_KPASS === "1"`. Leave it unset on Vercel. |
 | Kite payments in this repo are testnet only | `lib/kite/config.ts` sets chain 2368, RPC `https://rpc-testnet.gokite.ai/`, explorer `https://testnet.kitescan.ai`, pieUSD `0x38129cf4CE5E183eFF248F42A7D345Bb1B47621A`. The file says there is no mainnet configuration. | Do not add a mainnet key path. |
-| The public demo has no database | The ledger and the list are in `localStorage` and are sent back with each request | The server recomputes totals from signed rows. A deleted browser ledger is a new week. That is disclosed, not prevented. |
+| Demo persistence | Ledger + signed list in Redis/KV or `data/demo-sessions/` keyed by `melit_sid` | Clearing `localStorage` does not reset the weekly cap. Reset demo clears server ledger only. |
 | Passport sandbox rejects non-allowlisted merchants | README records `sandbox_merchant_not_allowlisted` from a local `kpass` attempt. That refusal is not a row in `data/recorded-receipts.json`. | Rail 2 is the path that can settle on the public deploy. Rail 1 is local only. |
 | Default testnet scale | `testnetScale()` defaults to `0.01` and clamps to `(0, 1]`. The live site on 15 Nov 2026 reported `testnetScale: 0.001`. | A $300 week is 3 pieUSD at 0.01 and 0.3 pieUSD at 0.001. Say which scale the deploy uses. Do not say the on-chain amount is $300. |
 
@@ -61,9 +61,9 @@ Cut from the bottom. P0 is the entry. P1 is still open and is listed in [AUDIT.m
 | P0 | List check, $300 check, HMAC on the rows the check reads, payment only after `allowed` | Built. Tests in `tests/spend-guard.test.ts`, `tests/shopping-list.test.ts`, `tests/payments.test.ts`. |
 | P0 | SERV call for each negotiation round, with a labelled fallback | Built. `decide` in `lib/negotiation/negotiator.ts`. |
 | P1 | The public URL serves this build, including the shopping list | **Done** on https://melit.vercel.app (15 Nov 2026, post-SERV fix). |
-| P1 | A rate limit that holds across serverless instances, including Reppo | Partial. Reppo routes use `LIMITS`; counters are still in-process. Redis is not built. |
+| P1 | A rate limit that holds across serverless instances, including Reppo | Built when `KV_REST_*` / `UPSTASH_REDIS_*` is set; in-process fallback otherwise. |
 | P1 | Refuse the dev HMAC secret when `VERCEL` is set and no key is present | **Done.** `ledgerSecret()` throws on Vercel without a configured secret. |
-| P2 | A server-side ledger so clearing the browser does not reset the week | Not built. Named as a known limitation. |
+| P2 | A server-side ledger so clearing the browser does not reset the week | Built: `lib/server/demo-state.ts`, `GET/DELETE /api/state`. |
 | P2 | `applyGuardrails` treats a missing `shoppingList` as off-list when list caps are in play | Partial. When `listMaxPriceCents` is set (live negotiate path), the item is treated as on-list; payment gate still authoritative. |
 
 ## Non-goals

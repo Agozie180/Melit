@@ -1,6 +1,6 @@
-// SERVER-ONLY. Verifies the client-held ledger before the Spend Guard sees it.
+// SERVER-ONLY. Verifies the ledger before the Spend Guard sees it.
 //
-// There is no database: the ledger lives in the browser and is sent with every request.
+// Authoritative rows are stored per session in lib/server/demo-state.ts; clients sync via GET /api/state.
 // Every entry is HMAC-signed by the server when a purchase is approved, so a client cannot
 // lower an amount, back-date a purchase, rename the item, or invent a refund without breaking
 // a signature.

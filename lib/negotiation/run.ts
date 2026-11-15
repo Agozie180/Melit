@@ -39,6 +39,11 @@ export interface LearningInput {
   reviews?: unknown;
 }
 
+export interface RunHooks {
+  /** Persists a signed ledger row after payment; runs before the purchased event is streamed. */
+  onLedgerAppend?: (entry: LedgerEntry) => Promise<void>;
+}
+
 export async function* runShopping(
   request: ShoppingRequest,
   rawLedger: unknown,
@@ -46,6 +51,7 @@ export async function* runShopping(
   deps: PurchaseDeps = defaultDeps(),
   learning: LearningInput = {},
   rawList: unknown = undefined,
+  hooks: RunHooks = {},
 ): AsyncGenerator<FeedEvent> {
   const catalogItem = findItem(request.query);
   if (!catalogItem) {
@@ -233,7 +239,7 @@ export async function* runShopping(
       yield { type: "no-deal", message: `Deal price ${formatUsd(dealPrice)} is above your max of ${formatUsd(request.maxPriceCents)}. Not buying.` };
       outcome = "no-deal";
     } else {
-      for await (const event of purchase(catalogItem, item, dealPrice, rawLedger, deps, rawList)) {
+      for await (const event of purchase(catalogItem, item, dealPrice, rawLedger, deps, rawList, hooks)) {
         if (event.type === "purchased") {
           outcome = "purchased";
           paidCents = event.entry.paidCents;
@@ -293,6 +299,7 @@ export async function* purchase(
   rawLedger: unknown,
   deps: PurchaseDeps = defaultDeps(),
   rawList: unknown = undefined,
+  hooks: RunHooks = {},
 ): AsyncGenerator<FeedEvent> {
   const guard = authorizePurchase(rawLedger, rawList, item.name, priceCents, Date.now());
   if (!guard.allowed) {
@@ -346,11 +353,17 @@ export async function* purchase(
     explorerUrl: receipt.explorerUrl,
     testnetAmount: receipt.testnetAmount ? `${receipt.testnetAmount} ${receipt.asset ?? ""}`.trim() : null,
   });
+  if (hooks.onLedgerAppend) await hooks.onLedgerAppend(entry);
   yield { type: "purchased", entry, receipt, guard };
 }
 
 /** Demo: Melit tries to buy something that doesn't fit the remaining weekly budget. */
-export async function* runOverspend(rawLedger: unknown, deps: PurchaseDeps = defaultDeps(), rawList: unknown = undefined): AsyncGenerator<FeedEvent> {
+export async function* runOverspend(
+  rawLedger: unknown,
+  deps: PurchaseDeps = defaultDeps(),
+  rawList: unknown = undefined,
+  hooks: RunHooks = {},
+): AsyncGenerator<FeedEvent> {
   const check = verifyLedger(rawLedger);
   if (!check.ok) {
     yield { type: "error", message: check.reason };
@@ -378,5 +391,5 @@ export async function* runOverspend(rawLedger: unknown, deps: PurchaseDeps = def
     request: { query: item.name, maxPriceCents: target.listPriceCents, priority: "fast" },
     remainingCents: remaining,
   };
-  yield* purchase(target, item, target.listPriceCents, rawLedger, deps, rawList);
+  yield* purchase(target, item, target.listPriceCents, rawLedger, deps, rawList, hooks);
 }

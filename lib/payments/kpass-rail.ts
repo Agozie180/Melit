@@ -7,7 +7,9 @@
 
 import { execFile } from "node:child_process";
 import { prepareKpassRuntime, resolveKpassBinary } from "../kite/kpass-runtime";
-import { explorerTxUrl, KITE_TESTNET } from "../kite/config";
+import { KITE_TESTNET } from "../kite/config";
+import { assertPassportHttpSettlement, explorerForTx, passportAlreadySettled } from "../kite/passport-settlement";
+import { ensureSandboxMerchantAllowed, merchantAllowlistErrorCode } from "../kite/sandbox-merchant";
 import { signOrder } from "./order-token";
 import { RailError, type PaymentOrder, type PaymentRail, type PaymentReceipt } from "./types";
 
@@ -107,33 +109,60 @@ export class KitePassportSandboxRail implements PaymentRail {
     const url = new URL(`/api/sellers/${encodeURIComponent(order.sellerId)}/checkout`, this.sellerBaseUrl);
     url.searchParams.set("order", signOrder(order));
 
-    const args = ["session", "execute", "--method", "GET", "--url", url.toString(), "--idempotency-key", order.orderId, "--no-browser", "--no-wait"];
-    if (this.sessionId) args.push("--session-id", this.sessionId);
-    const res = await this.run(args);
-    const json = res.json ?? {};
-    const code = str(json.error_code);
+    await ensureSandboxMerchantAllowed(this.run, this.sellerBaseUrl);
+
+    const executeArgs = [
+      "session",
+      "execute",
+      "--method",
+      "GET",
+      "--url",
+      url.toString(),
+      "--idempotency-key",
+      order.orderId,
+      "--no-browser",
+      "--no-wait",
+    ];
+    if (this.sessionId) executeArgs.push("--session-id", this.sessionId);
+
+    let res = await this.run(executeArgs);
+    let json = res.json ?? {};
+    let code = str(json.error_code);
+
+    if ((res.exitCode !== 0 || json.status !== "success") && merchantAllowlistErrorCode(code)) {
+      await ensureSandboxMerchantAllowed(this.run, this.sellerBaseUrl);
+      res = await this.run(executeArgs);
+      json = res.json ?? {};
+      code = str(json.error_code);
+    }
 
     if (res.exitCode !== 0 || json.status !== "success") {
+      const settledTx = await passportAlreadySettled(this.run, order.orderId);
+      if (settledTx) {
+        return {
+          receiptId: `kpass_${order.orderId}`,
+          rail: this.id,
+          amountCents: order.priceCents,
+          testnetAmount: str(dig(json, "payment_requirement", "amount")) ?? null,
+          asset: str(dig(json, "payment_requirement", "asset")) ?? null,
+          payee: url.host,
+          network: "Kite Passport sandbox",
+          txHash: settledTx,
+          explorerUrl: explorerForTx(settledTx, KITE_TESTNET.chainId),
+          settledAt: Date.now(),
+          note: "Recovered from Passport activity after execute returned an error.",
+        };
+      }
       const message = `kpass ${code ?? `exit ${res.exitCode}`}: ${str(json.error) ?? str(json.hint) ?? (res.stderr || "no output")}`;
       if (code && POLICY_CODES.has(code)) throw new RailError(`Passport session limit refused the payment (${message})`, false, code);
       if ((code && UNKNOWN_OUTCOME_CODES.has(code)) || res.exitCode === 7) {
         throw new RailError(`Passport payment outcome is unknown, not retrying on another rail (${message})`, false, code);
       }
-      throw new RailError(message, true, code);
+      const allowFallback = !code || merchantAllowlistErrorCode(code) || code === "host_not_in_executable_catalog";
+      throw new RailError(message, allowFallback, code);
     }
 
-    const status = Number(dig(json, "x402", "status_code") ?? dig(json, "payment", "status_code"));
-    if (!(status >= 200 && status < 300)) {
-      throw new RailError(`Seller returned HTTP ${Number.isFinite(status) ? status : "unknown"} through Passport`, false);
-    }
-
-    const txHash =
-      str(dig(json, "payment", "payment_response", "reference")) ??
-      str(dig(json, "x402", "payment_response", "reference")) ??
-      str(dig(json, "x402", "transaction_hash")) ??
-      null;
-    const chainId = Number(dig(json, "x402", "chain_id"));
-    const onKiteTestnet = chainId === KITE_TESTNET.chainId;
+    const { txHash, chainId } = assertPassportHttpSettlement(json);
 
     return {
       receiptId: str(json.payment_id) ?? `kpass_${order.orderId}`,
@@ -142,11 +171,10 @@ export class KitePassportSandboxRail implements PaymentRail {
       testnetAmount: str(dig(json, "payment_requirement", "amount")) ?? null,
       asset: str(dig(json, "payment_requirement", "asset")) ?? null,
       payee: url.host,
-      network: Number.isFinite(chainId) ? `eip155:${chainId}` : "Kite Passport sandbox",
+      network: Number.isFinite(chainId ?? NaN) ? `eip155:${chainId}` : "Kite Passport sandbox",
       txHash,
-      explorerUrl: txHash && onKiteTestnet ? explorerTxUrl(txHash) : null,
+      explorerUrl: txHash ? explorerForTx(txHash, chainId) : null,
       settledAt: Date.now(),
-      note: txHash ? undefined : "Passport did not return a transaction hash; check `kpass activity`.",
     };
   }
 }
