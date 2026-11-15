@@ -12,6 +12,7 @@ export interface AgentInfo {
     testnetScale: number;
   };
   reasoning: { provider: string; model: string; configured: boolean };
+  reppo: { configured: boolean; taskType: string };
   capCents: number;
   feeRate: number;
   catalog: PublicItem[];
