@@ -246,6 +246,18 @@ export function applyGuardrails(
     }
   }
 
+  // The opening ask is the sticker price, which sits above the walk-away limit on every
+  // catalog item. A walk there skips the haggle. Until the last round, make the offer the
+  // strategy would have opened with instead, still capped by the same limit.
+  if (action === "walk" && ctx.round < ctx.maxRounds && ceiling > lastOffer && ctx.currentAskCents > ceiling) {
+    const opened = heuristicDecision(ctx);
+    if (opened.action === "offer" && opened.offerPriceCents > lastOffer && opened.offerPriceCents < ctx.currentAskCents) {
+      guardrails.push(`Ask is above the ${limitName}, so the walk became an offer under that limit.`);
+      action = "offer";
+      offerPriceCents = Math.min(opened.offerPriceCents, ceiling);
+    }
+  }
+
   if (action === "offer") {
     if (offerPriceCents > ceiling) {
       guardrails.push(`Offer was above the ${limitName} and was lowered to it.`);
