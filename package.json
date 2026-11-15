@@ -11,7 +11,8 @@
     "test:coverage": "vitest run --coverage",
     "kite:setup": "node scripts/kite-setup.mjs",
     "testnet:balance": "node scripts/testnet-balance.mjs",
-    "verify:serv": "npx --yes tsx scripts/verify-serv-negotiate.mts"
+    "verify:serv": "npx --yes tsx scripts/verify-serv-negotiate.mts",
+    "verify:serv-payload": "npx --yes tsx scripts/probe-serv-payload.mts"
   },
   "dependencies": {
     "@x402/core": "^2.31.0",
