@@ -65,6 +65,24 @@ describe("negotiator", () => {
     expect(d.fallbackReason).toMatch(/500/);
   });
 
+  it("turns a walk into an offer when the sticker price is still above the limit", async () => {
+    const r = fakeReasoner([{ action: "walk", offerPrice: 0, reasoning: ["The ask is too high."], confidence: 0.9 }]);
+    const d = await decide(baseCtx, r);
+    expect(d.source).toBe("serv");
+    expect(d.action).toBe("offer");
+    expect(d.offerPriceCents).toBe(81_40);
+    expect(d.offerPriceCents).toBeLessThan(baseCtx.currentAskCents);
+    expect(d.guardrails.join(" ")).toMatch(/walk became an offer/);
+  });
+
+  it("keeps a walk on the final round and when the ask is already inside the limit", async () => {
+    const walk = { action: "walk", offerPrice: 0, reasoning: ["No."], confidence: 1 };
+    const finalRound = await decide({ ...baseCtx, round: 4 }, fakeReasoner([walk]));
+    expect(finalRound.action).toBe("walk");
+    const fairAsk = await decide({ ...baseCtx, currentAskCents: 100_00, userMaxPriceCents: 200_00 }, fakeReasoner([walk]));
+    expect(fairAsk.action).toBe("walk");
+  });
+
   it("clamps a model offer above the user's max price", async () => {
     const r = fakeReasoner([{ action: "offer", offerPrice: 125, reasoning: ["Go big."], confidence: 0.9 }]);
     const d = await decide({ ...baseCtx, userMaxPriceCents: 100_00 }, r);
