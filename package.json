@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "kite:setup": "node scripts/kite-setup.mjs"
+    "kite:setup": "node scripts/kite-setup.mjs",
+    "testnet:balance": "node scripts/testnet-balance.mjs"
   },
   "dependencies": {
     "@x402/core": "^2.31.0",
