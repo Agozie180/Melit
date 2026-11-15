@@ -51,9 +51,11 @@ export default function Dashboard() {
 
   const capCents = info?.capCents ?? WEEKLY_CAP_CENTS;
   const paymentsLabel = !info
-    ? "…"
+    ? infoError
+      ? "status unavailable"
+      : "checking…"
     : info.payments.mode === "testnet"
-      ? "KiteAI testnet"
+      ? `real KiteAI testnet pieUSD (scaled $1 = ${info.payments.testnetScale} pieUSD)`
       : info.payments.mode === "recorded"
         ? "recorded testnet receipts, no new payments"
         : "simulated, no money moves";
@@ -90,7 +92,7 @@ export default function Dashboard() {
           push,
         );
       } catch (err) {
-        push({ type: "error", message: `${(err as Error).message}. Nothing was bought.` });
+        push({ type: "error", message: `${(err as Error).message.replace(/\.$/, "")}. Nothing was bought.` });
       } finally {
         setRuns((prev) => prev.map((r) => (r.id === id ? { ...r, running: false } : r)));
         setBusy(false);
@@ -114,12 +116,12 @@ export default function Dashboard() {
             Melit<span className="text-emerald-600">.</span>
           </h1>
           <p className="mt-1 max-w-md text-sm text-neutral-600">
-            A shopping agent with a budget, a negotiator&apos;s brain and a savings vault. It haggles before it buys and can never spend more
-            than $300 in any 7 days.
+            A shopping agent with a budget, a negotiator&apos;s brain and a savings vault. It haggles before it buys, and the server blocks any payment
+            that would take your signed 7-day ledger over $300.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
             Kite + Reppo tracks · Mock sellers · payments: {paymentsLabel} · decisions by SERV Reasoning ·{" "}
-            {info ? (reppoConfigured ? "purchases judged by Reppo" : "Reppo judge not configured") : "…"}
+            {info ? (reppoConfigured ? "purchases judged by Reppo" : "Reppo judge not configured") : infoError ? "Reppo status unavailable" : "checking Reppo…"}
           </p>
         </div>
         <AgentCard info={info} />
