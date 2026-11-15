@@ -65,14 +65,17 @@ export async function POST(req: Request) {
     const e = err as ReppoError;
     return Response.json({ error: e.message, retryable: e.retryable ?? true }, { status: 502 });
   }
-  if (evaluation.status !== "COMPLETED" || !verdictIsReady(evaluation.verdict)) {
+  if (evaluation.status !== "COMPLETED") {
+    return Response.json(
+      { error: `Reppo evaluation is ${evaluation.status}, not COMPLETED.`, retryable: evaluation.status !== "FAILED" },
+      { status: 409 },
+    );
+  }
+  if (!verdictIsReady(evaluation.verdict)) {
     return Response.json(
       {
-        error:
-          evaluation.status === "COMPLETED"
-            ? "Reppo marked the evaluation COMPLETED but has not returned score/route yet."
-            : `Reppo evaluation is ${evaluation.status}, not COMPLETED.`,
-        retryable: evaluation.status !== "FAILED",
+        error: "Reppo marked the evaluation COMPLETED but has not returned score/route yet.",
+        retryable: true,
       },
       { status: 409 },
     );
