@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ReppoError, getReppoClient } from "@/lib/adapters/reppo";
 import { buildReppoInput } from "@/lib/learning/reppo-input";
 import { verifyDealSummary } from "@/lib/server/deal-summary";
+import { clientIp } from "@/lib/server/rate-limit";
 
 export const maxDuration = 30;
 
@@ -13,10 +14,6 @@ const submittedDeals = new Map<string, string>();
 const lastSubmitByClient = new Map<string, number>();
 
 const BodySchema = z.object({ summary: z.unknown() });
-
-function clientKey(req: Request): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "local";
-}
 
 /** Submit one finished purchase to Reppo for evaluation. Returns as soon as Reppo has queued it. */
 export async function POST(req: Request) {
@@ -38,7 +35,7 @@ export async function POST(req: Request) {
   if (!client.configured) {
     return Response.json({ error: "Reppo is not configured on this deployment (REPPO_API_KEY).", retryable: false }, { status: 503 });
   }
-  const key = clientKey(req);
+  const key = clientIp(req);
   const last = lastSubmitByClient.get(key) ?? 0;
   if (Date.now() - last < MIN_GAP_PER_CLIENT_MS) {
     return Response.json({ error: "One Reppo submission at a time; try again shortly.", retryable: true }, { status: 429 });

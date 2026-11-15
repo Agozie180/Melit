@@ -3,6 +3,7 @@ import { runShopping } from "@/lib/negotiation/run";
 import { getReasoningAdapter } from "@/lib/adapters/reasoning";
 import { ndjsonResponse } from "@/lib/server/stream";
 import { parseProfile } from "@/lib/learning/profile";
+import { rateLimit } from "@/lib/server/rate-limit";
 
 export const maxDuration = 120;
 
@@ -18,6 +19,8 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const limited = rateLimit(req, "negotiate");
+  if (limited) return limited;
   const body = BodySchema.safeParse(await req.json().catch(() => null));
   if (!body.success) {
     return Response.json({ error: "Invalid request: give an item, a max price and a priority." }, { status: 400 });

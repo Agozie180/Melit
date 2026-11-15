@@ -7,6 +7,7 @@ import { applyBoundedUpdate, parseProfile } from "@/lib/learning/profile";
 import { buildReppoInput } from "@/lib/learning/reppo-input";
 import type { FeedbackResponse, LearningEvent } from "@/lib/learning/types";
 import { verifyDealSummary } from "@/lib/server/deal-summary";
+import { rateLimit } from "@/lib/server/rate-limit";
 
 export const maxDuration = 60;
 
@@ -27,6 +28,8 @@ const BodySchema = z.discriminatedUnion("kind", [
 ]);
 
 export async function POST(req: Request) {
+  const limited = rateLimit(req, "feedback");
+  if (limited) return limited;
   const body = BodySchema.safeParse(await req.json().catch(() => null));
   if (!body.success) return Response.json({ error: "Invalid feedback request." }, { status: 400 });
   const summaryCheck = verifyDealSummary(body.data.summary);
