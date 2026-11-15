@@ -32,8 +32,8 @@ async function main() {
     process.exit(0);
   } catch (e) {
     const msg = (e as Error).message;
-    if (msg.includes("max_tokens is too large")) {
-      console.error("FAIL: still hit max_tokens limit:", msg.slice(0, 240));
+    if (msg.includes("max_tokens is too large") || msg.includes("Unsupported parameter: 'max_tokens'")) {
+      console.error("FAIL: completion token parameter rejected:", msg.slice(0, 240));
       process.exit(1);
     }
     if (msg.includes("HTTP 401") || msg.includes("HTTP 403") || msg.toLowerCase().includes("unauthorized") || msg.includes("invalid api key")) {

@@ -81,7 +81,7 @@ export class ServReasoningAdapter implements ReasoningAdapter {
         body: JSON.stringify({
           model: this.model,
           reasoning_effort: "low",
-          max_tokens: maxCompletionTokens(),
+          max_completion_tokens: maxCompletionTokens(),
           messages: [
             { role: "system", content: args.system },
             { role: "user", content: args.user },

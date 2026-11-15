@@ -14,7 +14,7 @@ describe("ServReasoningAdapter", () => {
     delete process.env.SERV_MAX_TOKENS;
   });
 
-  it("sends a bounded max_tokens so strict json_schema does not exceed the model limit", async () => {
+  it("sends bounded max_completion_tokens so strict json_schema does not exceed the model limit", async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({
         model: "gpt-5.4-mini",
@@ -32,8 +32,9 @@ describe("ServReasoningAdapter", () => {
     });
 
     const body = lastFetchBody(fetchMock);
-    expect(body.max_tokens).toBe(2048);
-    expect(body.max_tokens).toBeLessThanOrEqual(16_000);
+    expect(body.max_completion_tokens).toBe(2048);
+    expect(body.max_completion_tokens).toBeLessThanOrEqual(16_000);
+    expect(body.max_tokens).toBeUndefined();
   });
 
   it("honours SERV_MAX_COMPLETION_TOKENS when set", async () => {
@@ -52,6 +53,6 @@ describe("ServReasoningAdapter", () => {
       schemaName: "test",
       schema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false },
     });
-    expect(lastFetchBody(fetchMock).max_tokens).toBe(512);
+    expect(lastFetchBody(fetchMock).max_completion_tokens).toBe(512);
   });
 });
