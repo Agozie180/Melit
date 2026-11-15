@@ -1,0 +1,210 @@
+// Melit's side of the table. Every decision is asked of SERV Reasoning first; if that call
+// fails or returns something that doesn't validate, a simple heuristic takes over and the
+// round is flagged "fallback". Hard limits (user max price, remaining weekly budget) are then
+// applied in code, so the model can recommend but can never exceed them.
+
+import { z } from "zod";
+import type { NegotiationDecision, Priority, PublicItem } from "../types";
+import { centsToDollars, dollarsToCents } from "../money";
+import type { ReasoningAdapter } from "../adapters/reasoning";
+
+export interface HistoryTurn {
+  round: number;
+  melitAction: "offer" | "accept" | "walk";
+  melitOfferCents: number;
+  sellerStatus?: "accept" | "counter" | "walk";
+  sellerPriceCents?: number;
+  sellerMessage?: string;
+}
+
+export interface NegotiationContext {
+  item: PublicItem;
+  round: number;
+  maxRounds: number;
+  currentAskCents: number;
+  history: HistoryTurn[];
+  remainingBudgetCents: number;
+  userMaxPriceCents: number;
+  priority: Priority;
+}
+
+export const DecisionSchema = z.object({
+  action: z.enum(["offer", "accept", "walk"]),
+  offerPrice: z.number().finite().nonnegative(),
+  reasoning: z.array(z.string().min(1).max(400)).min(1).max(8),
+  confidence: z.number().min(0).max(1),
+});
+
+const DECISION_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    action: { type: "string", enum: ["offer", "accept", "walk"], description: "offer = propose offerPrice; accept = take the seller's current ask; walk = end without buying" },
+    offerPrice: { type: "number", description: "USD. The price Melit proposes (for accept, the current ask; for walk, 0)." },
+    reasoning: { type: "array", items: { type: "string" }, description: "2-5 short, user-readable reasoning steps." },
+    confidence: { type: "number", description: "0 to 1" },
+  },
+  required: ["action", "offerPrice", "reasoning", "confidence"],
+  additionalProperties: false,
+} as const;
+
+export const SYSTEM_PROMPT = `You are Melit, a careful shopping agent negotiating on behalf of a user who is not good at haggling or saving.
+Prompt version: melit-negotiator-v1.
+
+Objective: get the item for the lowest reasonable price without losing a good deal, then let the savings go to the user's vault.
+
+Decision priorities:
+1. Never recommend paying more than hardCeilingUsd (the lower of the user's max price and their remaining weekly budget). Code enforces this anyway.
+2. If priority is "save": open well below the market reference, raise offers in small steps, and be willing to walk if the seller will not come near the market reference.
+3. If priority is "fast": open close to the market reference and accept quickly once the ask is at or below the market reference.
+4. Offers must never go down between rounds and must be below the current ask (otherwise choose "accept").
+5. Treat "this is my last price" claims with skepticism if the seller has kept conceding.
+6. On the final round, accept if the current ask is within hardCeilingUsd and fair versus the market reference; otherwise make your best final offer or walk.
+
+Output rules: respond only with the JSON object required by the schema. offerPrice is in US dollars with at most 2 decimals. For "accept" set offerPrice to the current ask; for "walk" set it to 0. reasoning is 2-5 short plain-English steps the user will read. confidence is 0 to 1.
+Do not do arithmetic you do not need: the user message already includes the computed gaps and ceilings.`;
+
+function buildUserMessage(ctx: NegotiationContext): string {
+  const ceiling = Math.min(ctx.userMaxPriceCents, ctx.remainingBudgetCents);
+  const lastOffer = [...ctx.history].reverse().find((h) => h.melitAction === "offer");
+  const payload = {
+    item: ctx.item.name,
+    seller: ctx.item.sellerName,
+    sellerStyle: ctx.item.personality,
+    listPriceUsd: centsToDollars(ctx.item.listPriceCents),
+    marketReferencePriceUsd: centsToDollars(ctx.item.marketReferenceCents),
+    currentAskUsd: centsToDollars(ctx.currentAskCents),
+    askMinusMarketUsd: centsToDollars(ctx.currentAskCents - ctx.item.marketReferenceCents),
+    askVsMarketPercent: Math.round((ctx.currentAskCents / ctx.item.marketReferenceCents) * 1000) / 10,
+    lastMelitOfferUsd: lastOffer ? centsToDollars(lastOffer.melitOfferCents) : null,
+    round: ctx.round,
+    maxRounds: ctx.maxRounds,
+    isFinalRound: ctx.round >= ctx.maxRounds,
+    userPriority: ctx.priority,
+    userMaxPriceUsd: centsToDollars(ctx.userMaxPriceCents),
+    remainingWeeklyBudgetUsd: centsToDollars(ctx.remainingBudgetCents),
+    hardCeilingUsd: centsToDollars(ceiling),
+    currentAskWithinCeiling: ctx.currentAskCents <= ceiling,
+    history: ctx.history.map((h) => ({
+      round: h.round,
+      melit: h.melitAction === "offer" ? `offered $${centsToDollars(h.melitOfferCents)}` : h.melitAction,
+      seller: h.sellerStatus
+        ? `${h.sellerStatus}${h.sellerPriceCents ? ` at $${centsToDollars(h.sellerPriceCents)}` : ""}: "${h.sellerMessage ?? ""}"`
+        : null,
+    })),
+  };
+  return `Decide Melit's next move.\n${JSON.stringify(payload, null, 2)}`;
+}
+
+/** Deterministic fallback used when SERV is unavailable or returns invalid output. */
+export function heuristicDecision(ctx: NegotiationContext): Omit<NegotiationDecision, "source" | "guardrails" | "fallbackReason"> {
+  const ceiling = Math.min(ctx.userMaxPriceCents, ctx.remainingBudgetCents);
+  const market = ctx.item.marketReferenceCents;
+  const step = ctx.round - 1;
+  const targetShare = ctx.priority === "save" ? 0.72 + 0.07 * step : 0.88 + 0.05 * step;
+  const acceptBelow = ctx.priority === "save" ? market * 0.95 : market * 1.02;
+  const target = Math.min(ceiling, Math.round(market * targetShare));
+  const final = ctx.round >= ctx.maxRounds;
+
+  if (ctx.currentAskCents <= ceiling && (ctx.currentAskCents <= acceptBelow || ctx.currentAskCents <= target || (final && ctx.currentAskCents <= market * 1.05))) {
+    return {
+      action: "accept",
+      offerPriceCents: ctx.currentAskCents,
+      reasoning: ["Heuristic: the current ask is at or below my acceptable price for this priority.", "Accepting now to lock in the deal."],
+      confidence: 0.6,
+    };
+  }
+  if (target <= 0) {
+    return { action: "walk", offerPriceCents: 0, reasoning: ["Heuristic: no budget left within the user's limits."], confidence: 0.9 };
+  }
+  return {
+    action: "offer",
+    offerPriceCents: target,
+    reasoning: [
+      `Heuristic: offer ${Math.round(targetShare * 100)}% of the market reference price.`,
+      final ? "Final round: this is my best offer." : "Raise the offer a little each round.",
+    ],
+    confidence: 0.5,
+  };
+}
+
+/** Hard limits applied to every decision, whichever brain produced it. */
+export function applyGuardrails(
+  ctx: NegotiationContext,
+  d: Omit<NegotiationDecision, "guardrails">,
+): NegotiationDecision {
+  const guardrails: string[] = [];
+  const ceiling = Math.min(ctx.userMaxPriceCents, ctx.remainingBudgetCents);
+  const lastOffer = [...ctx.history].reverse().find((h) => h.melitAction === "offer")?.melitOfferCents ?? 0;
+  let { action, offerPriceCents } = d;
+
+  if (ceiling <= 0 && action !== "walk") {
+    guardrails.push("No room under the user's max price or weekly budget: walking away.");
+    return { ...d, action: "walk", offerPriceCents: 0, guardrails };
+  }
+
+  if (action === "accept") {
+    if (ctx.currentAskCents > ceiling) {
+      if (ctx.round < ctx.maxRounds) {
+        guardrails.push(`Ask is above the hard ceiling, so the accept became an offer at the ceiling.`);
+        action = "offer";
+        offerPriceCents = ceiling;
+      } else {
+        guardrails.push("Ask is above the hard ceiling on the final round: walking away.");
+        return { ...d, action: "walk", offerPriceCents: 0, guardrails };
+      }
+    } else {
+      offerPriceCents = ctx.currentAskCents;
+    }
+  }
+
+  if (action === "offer") {
+    if (offerPriceCents > ceiling) {
+      guardrails.push("Offer was above the hard ceiling and was lowered to it.");
+      offerPriceCents = ceiling;
+    }
+    if (offerPriceCents < lastOffer) {
+      guardrails.push("Offer can't go below the previous offer; raised back to it.");
+      offerPriceCents = lastOffer;
+    }
+    if (offerPriceCents <= 0) {
+      guardrails.push("Offer was not a positive amount; walking away.");
+      return { ...d, action: "walk", offerPriceCents: 0, guardrails };
+    }
+    if (offerPriceCents >= ctx.currentAskCents) {
+      guardrails.push("Offer met the current ask, so it was treated as accepting the ask.");
+      action = "accept";
+      offerPriceCents = ctx.currentAskCents;
+    }
+  }
+
+  if (action === "walk") offerPriceCents = 0;
+  return { ...d, action, offerPriceCents, guardrails };
+}
+
+export async function decide(ctx: NegotiationContext, reasoner: ReasoningAdapter): Promise<NegotiationDecision> {
+  let fallbackReason: string;
+  try {
+    const result = await reasoner.completeJson({
+      system: SYSTEM_PROMPT,
+      user: buildUserMessage(ctx),
+      schemaName: "melit_negotiation_decision",
+      schema: DECISION_JSON_SCHEMA as unknown as Record<string, unknown>,
+    });
+    const parsed = DecisionSchema.safeParse(result.json);
+    if (parsed.success) {
+      return applyGuardrails(ctx, {
+        action: parsed.data.action,
+        offerPriceCents: dollarsToCents(parsed.data.offerPrice),
+        reasoning: parsed.data.reasoning,
+        confidence: parsed.data.confidence,
+        source: "serv",
+        model: result.model,
+      });
+    }
+    fallbackReason = `SERV output failed schema validation: ${parsed.error.issues[0]?.message ?? "invalid"}`;
+  } catch (err) {
+    fallbackReason = (err as Error).message;
+  }
+
+  return applyGuardrails(ctx, { ...heuristicDecision(ctx), source: "fallback", fallbackReason });
+}
