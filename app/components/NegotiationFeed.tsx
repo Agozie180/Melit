@@ -1,6 +1,7 @@
 import type { FeedEvent, NegotiationRound } from "@/lib/types";
 import { formatUsd } from "@/lib/money";
 import { Badge, Card, CardTitle } from "./ui";
+import { AttemptTrail, ReceiptDetails } from "./Receipt";
 
 export interface FeedRun {
   id: string;
@@ -115,10 +116,15 @@ function RunView({ run }: { run: FeedRun }) {
                   <p className="font-semibold text-emerald-900">
                     Bought for {formatUsd(e.entry.paidCents)}, saved {formatUsd(e.entry.savedCents)} → vault
                   </p>
-                  <p className="mt-1 text-xs text-emerald-900/80">
-                    Spend Guard approved. <Badge tone="amber">Simulated payment</Badge>{" "}
-                    <span className="font-mono">{e.receipt.receiptId.slice(0, 18)}…</span> (no real money moved)
-                  </p>
+                  <ReceiptDetails receipt={e.receipt} />
+                </li>
+              );
+            case "payment-failed":
+              return (
+                <li key={i} className="feed-in rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="alert">
+                  <p className="font-semibold">Payment of {formatUsd(e.priceCents)} didn&apos;t go through. Nothing was bought.</p>
+                  <AttemptTrail attempts={e.attempts} />
+                  {e.attempts.length === 0 && <p className="mt-1 text-xs">{e.message}</p>}
                 </li>
               );
             case "error":

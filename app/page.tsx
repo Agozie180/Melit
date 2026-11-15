@@ -25,6 +25,13 @@ export default function Dashboard() {
   }, []);
 
   const capCents = info?.capCents ?? WEEKLY_CAP_CENTS;
+  const paymentsLabel = !info
+    ? "…"
+    : info.payments.mode === "testnet"
+      ? "KiteAI testnet (pieUSD)"
+      : info.payments.mode === "recorded"
+        ? "recorded testnet receipts, no new payments"
+        : "simulated, no money moves";
   const spentCents = spentInWindow(ledger, now);
   const savedCents = ledger.reduce((sum, e) => sum + Math.max(0, e.savedCents), 0);
 
@@ -72,7 +79,7 @@ export default function Dashboard() {
             than $300 in any 7 days.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
-            Kite track demo · mock sellers · simulated identity and payments · decisions by SERV Reasoning
+            Kite track · Mock sellers · payments: {paymentsLabel} · decisions by SERV Reasoning
           </p>
         </div>
         <AgentCard info={info} />
@@ -118,7 +125,8 @@ export default function Dashboard() {
       </div>
 
       <footer className="mt-8 text-center text-xs text-neutral-500">
-        Melit keeps 15% of what it saves you; you keep 85%. Sellers, identity and payments in this demo are simulated. No real money moves.
+        Melit keeps 15% of what it saves you; you keep 85%. Sellers are mocks. Testnet payments use free test tokens (pieUSD on KiteAI
+        testnet, scaled down); simulated and recorded receipts move no money and are labelled as such.
       </footer>
     </main>
   );

@@ -1,12 +1,13 @@
 import type { LedgerEntry } from "@/lib/types";
 import { formatUsd } from "@/lib/money";
-import { Badge, Card, CardTitle } from "./ui";
+import { Card, CardTitle } from "./ui";
+import { RailBadge, TxLink } from "./Receipt";
 
 export function LedgerTable({ ledger }: { ledger: LedgerEntry[] }) {
   const rows = [...ledger].sort((a, b) => b.timestamp - a.timestamp);
   return (
     <Card>
-      <CardTitle aside={<Badge tone="amber">Simulated payments</Badge>}>Ledger</CardTitle>
+      <CardTitle aside={<span className="text-xs text-neutral-500">each row shows the rail that paid</span>}>Ledger</CardTitle>
       {rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-black/10 p-4 text-center text-sm text-neutral-500">Nothing bought yet.</p>
       ) : (
@@ -27,6 +28,11 @@ export function LedgerTable({ ledger }: { ledger: LedgerEntry[] }) {
                   <td className="py-2">
                     <p className="font-medium">{e.itemName}</p>
                     <p className="text-xs text-neutral-500">{e.sellerName}</p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-neutral-500">
+                      <RailBadge rail={e.rail} />
+                      {e.testnetAmount && <span>{e.testnetAmount} pieUSD</span>}
+                      <TxLink txHash={e.txHash} explorerUrl={e.explorerUrl} />
+                    </p>
                   </td>
                   <td className="py-2 text-right text-neutral-500">{formatUsd(e.listPriceCents)}</td>
                   <td className="py-2 text-right">{formatUsd(e.paidCents)}</td>

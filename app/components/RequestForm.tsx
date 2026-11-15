@@ -101,7 +101,7 @@ export function RequestForm({
       </form>
 
       <div className="mt-5">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Mock market (labelled test sellers)</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Mock sellers</p>
         <ul className="flex flex-wrap gap-1.5">
           {shoppable.map((item) => (
             <li key={item.id}>
