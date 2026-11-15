@@ -42,10 +42,10 @@ export async function POST(req: Request) {
   if (Date.now() - last < MIN_GAP_PER_CLIENT_MS) {
     return Response.json({ error: "One Reppo submission at a time; try again shortly.", retryable: true }, { status: 429 });
   }
-  lastSubmitByClient.set(key, Date.now());
 
   try {
     const evaluation = await client.submit("action", buildReppoInput(summary));
+    lastSubmitByClient.set(key, Date.now());
     submittedDeals.set(summary.dealId, evaluation.id);
     return withRemaining(Response.json({ evalId: evaluation.id, status: evaluation.status }, { status: 201 }), remaining);
   } catch (err) {

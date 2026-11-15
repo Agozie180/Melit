@@ -7,7 +7,7 @@
 import { useEffect, useRef } from "react";
 import { markError, markLearned, markPolled, markSubmitted, nextAction, verdictsToLearn } from "../learning/reppo-queue";
 import type { ReppoVerdict } from "../learning/types";
-import { dealsStore, learnFromReppo, reppoJobsStore } from "./learning";
+import { backfillReppoJobs, dealsStore, learnFromReppo, reppoJobsStore } from "./learning";
 
 const TICK_MS = 2_000;
 const LEARN_RETRY_MS = 30_000;
@@ -27,6 +27,7 @@ export function useReppoQueue(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
+    backfillReppoJobs();
     let cancelled = false;
 
     async function tick() {

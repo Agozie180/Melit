@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { normalizeItemName } from "../shopping/list";
 import { z } from "zod";
 import { RailError, type PaymentOrder, type PaymentRail, type PaymentReceipt } from "./types";
 
@@ -41,14 +42,16 @@ const RecordedSchema = z.object({
 });
 export type RecordedReceipt = z.infer<typeof RecordedSchema>;
 
+const DEFAULT_RECORDED_RECEIPTS = join(process.cwd(), "data", "recorded-receipts.json");
+
 export function recordedReceiptsPath(): string {
-  return process.env.MELIT_RECORDED_RECEIPTS_PATH || join(process.cwd(), "data", "recorded-receipts.json");
+  return process.env.MELIT_RECORDED_RECEIPTS_PATH || DEFAULT_RECORDED_RECEIPTS;
 }
 
 export function loadRecordedReceipts(path = recordedReceiptsPath()): RecordedReceipt[] {
-  if (!existsSync(path)) return [];
+  if (!existsSync(/* turbopackIgnore: true */ path)) return [];
   try {
-    return z.array(RecordedSchema).parse(JSON.parse(readFileSync(path, "utf8")));
+    return z.array(RecordedSchema).parse(JSON.parse(readFileSync(/* turbopackIgnore: true */ path, "utf8")));
   } catch {
     return [];
   }
@@ -82,8 +85,14 @@ export class RecordedRail implements PaymentRail {
 
   async pay(order: PaymentOrder): Promise<Omit<PaymentReceipt, "attempts">> {
     if (this.receipts.length === 0) throw new RailError("No recorded testnet receipts are available to replay.");
-    const r = this.receipts[this.next++ % this.receipts.length];
+    const forItem = this.receipts.filter((row) => normalizeItemName(row.itemName) === normalizeItemName(order.itemName));
+    const pool = forItem.length ? forItem : this.receipts;
+    const r = pool[this.next++ % pool.length]!;
     const when = new Date(r.recordedAt).toISOString().replace("T", " ").slice(0, 16);
+    const amountNote =
+      r.amountCents !== order.priceCents
+        ? ` Ledger amount is ${order.priceCents}¢; the replayed tx was for ${r.amountCents}¢.`
+        : "";
     return {
       receiptId: `rec_${randomUUID()}`,
       rail: this.id,
@@ -95,7 +104,7 @@ export class RecordedRail implements PaymentRail {
       txHash: r.txHash,
       explorerUrl: r.explorerUrl,
       settledAt: Date.now(),
-      note: `Recorded: replays a real ${r.rail === "direct-testnet" ? "direct testnet transfer" : "Kite Passport sandbox payment"} for "${r.itemName}" made ${when} UTC on a local run. No new payment was made.`,
+      note: `Recorded: replays a real ${r.rail === "direct-testnet" ? "direct testnet transfer" : "Kite Passport sandbox payment"} for "${r.itemName}" made ${when} UTC on a local run. No new payment was made.${amountNote}`,
     };
   }
 }

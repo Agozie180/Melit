@@ -128,6 +128,9 @@ describe("learned strategy in negotiation", () => {
     remainingBudgetCents: 300_00,
     userMaxPriceCents: 200_00,
     priority: "save",
+    listMaxPriceCents: 200_00,
+    quantityRemaining: 1,
+    shoppingList: [{ name: "Wireless Earbuds", maxPriceUsd: 200, quantity: 1, quantityRemaining: 1 }],
   };
 
   it("injects the profile and reputation into every SERV call", async () => {

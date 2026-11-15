@@ -86,7 +86,7 @@ Numbers below are what the tests assert. Re-run the command rather than trusting
 | The hidden floor is not in the SERV prompt | the user message does not match `/floor/i` | `npm test -- tests/negotiator.test.ts` |
 | Line coverage of `lib/` and `app/` | 46.32% lines (763/1647). Statements 43.95%. Branches 36.67%. Functions 39.69%. `spend-guard.ts` is 100% lines. UI files are 0% | `npm run test:coverage` |
 
-On 15 Nov 2026, `npm test` reported 87 passing tests. The coverage row is from the same day's `npm run test:coverage`.
+On 15 Nov 2026, `npm test` reported 96 passing tests. The coverage row is from the same day's `npm run test:coverage`.
 
 ## Try it in 30 seconds
 

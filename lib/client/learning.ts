@@ -100,7 +100,8 @@ export function recordSellerReview(review: SellerReview): SellerReputation {
 }
 
 /** A negotiation finished: keep it for metrics and, for purchases, queue it for Reppo. */
-export function recordDeal(summary: DealSummary, review: SellerReview | null, reppoEnabled: boolean) {
+/** Queue purchased deals for Reppo immediately; the hook no-ops submit when Reppo is not configured. */
+export function recordDeal(summary: DealSummary, review: SellerReview | null) {
   const record: DealRecord = {
     dealId: summary.dealId,
     at: summary.at,
@@ -117,9 +118,25 @@ export function recordDeal(summary: DealSummary, review: SellerReview | null, re
     feedback: null,
   };
   dealsStore.set((deals) => [...deals.filter((d) => d.dealId !== record.dealId), record].slice(-100));
-  if (reppoEnabled && summary.outcome === "purchased") {
+  if (summary.outcome === "purchased") {
     reppoJobsStore.set((jobs) => enqueue(jobs, summary.dealId, Date.now()));
   }
+}
+
+/** After Reppo becomes configured, enqueue any purchased deals that finished before /api/agent loaded. */
+export function backfillReppoJobs() {
+  const jobs = reppoJobsStore.getSnapshot();
+  const jobDeals = new Set(jobs.map((j) => j.dealId));
+  const missing = dealsStore
+    .getSnapshot()
+    .filter((d) => d.outcome === "purchased" && d.summary && !jobDeals.has(d.dealId));
+  if (missing.length === 0) return;
+  let next = jobs;
+  const now = Date.now();
+  for (const d of missing) {
+    next = enqueue(next, d.dealId, now);
+  }
+  reppoJobsStore.set(next);
 }
 
 async function postFeedback(body: Record<string, unknown>): Promise<FeedbackResponse> {

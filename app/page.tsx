@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { FeedEvent, ShoppingRequest } from "@/lib/types";
 import { spentInWindow } from "@/lib/guard/spend-guard";
 import { WEEKLY_CAP_CENTS } from "@/lib/money";
@@ -49,6 +49,7 @@ export default function Dashboard() {
   useReppoQueue(reppoConfigured);
   const [runs, setRuns] = useState<FeedRun[]>([]);
   const [busy, setBusy] = useState(false);
+  const negotiateInFlight = useRef(false);
   const now = useSyncExternalStore(clockStore.subscribe, clockStore.getSnapshot, clockStore.getServerSnapshot);
 
   useEffect(() => {
@@ -71,7 +72,8 @@ export default function Dashboard() {
 
   const run = useCallback(
     async (kind: FeedRun["kind"], url: string, body: Record<string, unknown>) => {
-      if (busy) return;
+      if (negotiateInFlight.current) return;
+      negotiateInFlight.current = true;
       setBusy(true);
       const id = crypto.randomUUID();
       setRuns((prev) => [{ id, kind, events: [], running: true }, ...prev]);
@@ -88,7 +90,7 @@ export default function Dashboard() {
           recordSellerReview(e.review);
         }
         if (e.type === "summary") {
-          recordDeal(e.summary, review, reppoConfigured);
+          recordDeal(e.summary, review);
           return;
         }
         if (e.type === "done") return;
@@ -110,10 +112,11 @@ export default function Dashboard() {
         push({ type: "error", message: `${(err as Error).message.replace(/\.$/, "")}. Nothing was bought.` });
       } finally {
         setRuns((prev) => prev.map((r) => (r.id === id ? { ...r, running: false } : r)));
+        negotiateInFlight.current = false;
         setBusy(false);
       }
     },
-    [busy, reppoConfigured],
+    [],
   );
 
   const shop = (request: ShoppingRequest) => run("shop", "/api/negotiate", { request });
