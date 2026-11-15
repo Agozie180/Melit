@@ -7,12 +7,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "kite:setup": "node scripts/kite-setup.mjs"
   },
   "dependencies": {
+    "@x402/core": "^2.31.0",
+    "@x402/evm": "^2.31.0",
+    "@x402/next": "^2.31.0",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "viem": "^2.57.19",
     "zod": "^4.6.7"
   },
   "devDependencies": {
