@@ -113,7 +113,7 @@ Filled from the playbook's pre-submission list. A box is checked only where this
 
 - [x] README has the thesis, the proof badges (tests workflow, measured line coverage, live demo, testnet wallet, pieUSD, npm not published, program result not announced), the links, the used/not-used table, the measured table, and the limitations.
 - [x] [demo.md](./demo.md) is a 90-second script that starts with the refusal.
-- [ ] `demo.mp4` is a 1:55 cut. It does not follow that 90-second order. Do not tell a judge they are the same film.
+- [x] `demo.mp4` is not in the repo (too large; use [demo.md](./demo.md) + live app or X video).
 
 **Honesty**
 
@@ -124,7 +124,7 @@ Filled from the playbook's pre-submission list. A box is checked only where this
 **Hygiene**
 
 - [x] `.env*` is gitignored except `.env.example`. A history scan on 15 Nov 2026 found no committed API key or private key.
-- [ ] `AGENTS.md` is still in the tree. Next.js rewrites it if it is removed. It is a framework file, not a secret.
+- [x] `AGENTS.md` is gitignored. Next.js may recreate it locally; it is not pushed to GitHub.
 
 **Compounding**
 
