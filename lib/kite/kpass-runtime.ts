@@ -1,10 +1,10 @@
 // SERVER-ONLY. Materialize kpass auth state on serverless (Vercel) from secrets.
 
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
+import * as tar from "tar";
 
 let prepared = false;
 
@@ -50,7 +50,15 @@ export function prepareKpassRuntime(): string | null {
     mkdirSync(workdir, { recursive: true });
     const tmp = join("/tmp", `kpass-bundle-${Date.now()}.tar.gz`);
     writeFileSync(tmp, Buffer.from(b64, "base64"));
-    execFileSync("tar", ["-xzf", tmp, "-C", workdir], { stdio: "pipe" });
+    try {
+      tar.x({ cwd: workdir, file: tmp, sync: true });
+    } finally {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
+    }
     chmodSync(workdir, 0o700);
   }
   prepared = true;
