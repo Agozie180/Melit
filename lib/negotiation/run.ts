@@ -9,7 +9,7 @@ import { sellerPushes } from "../market/offers";
 import { MAX_ROUNDS, sellerRespond } from "../market/seller";
 import { checkSpend } from "../guard/spend-guard";
 import { signEntry, verifyLedger } from "../server/ledger";
-import { authorizePurchase, verifyShoppingList } from "../server/shopping-list";
+import { authorizePurchase, NO_LIST_REASON, verifyShoppingList } from "../server/shopping-list";
 import { declineOffer, findListItem, unitsBought } from "../shopping/list";
 import { getPaymentRouter } from "../payments";
 import { recordReceipt } from "../payments/offline-rails";
@@ -61,6 +61,23 @@ export async function* runShopping(
   }
   const listCheck = verifyShoppingList(rawList);
   if (!listCheck.ok) {
+    if (listCheck.reason === NO_LIST_REASON) {
+      const attempted = Math.min(catalogItem.listPriceCents, request.maxPriceCents);
+      yield {
+        type: "declined-offer",
+        offer: declineOffer({
+          id: `request:${catalogItem.id}`,
+          kind: "request",
+          itemName: item.name,
+          sellerName: item.sellerName,
+          priceCents: catalogItem.listPriceCents,
+          pitch: listCheck.reason,
+          at: Date.now(),
+        }),
+      };
+      yield { type: "blocked", guard: authorizePurchase(rawLedger, rawList, item.name, attempted, Date.now()), item, priceCents: attempted };
+      return;
+    }
     yield { type: "error", message: listCheck.reason };
     return;
   }
@@ -335,10 +352,14 @@ export async function* purchase(
 /** Demo: Melit tries to buy something that doesn't fit the remaining weekly budget. */
 export async function* runOverspend(rawLedger: unknown, deps: PurchaseDeps = defaultDeps(), rawList: unknown = undefined): AsyncGenerator<FeedEvent> {
   const check = verifyLedger(rawLedger);
+  if (!check.ok) {
+    yield { type: "error", message: check.reason };
+    return;
+  }
   const listCheck = verifyShoppingList(rawList);
-  const entries = check.ok ? check.entries : [];
+  const entries = check.entries;
   const list = listCheck.ok ? listCheck.items : [];
-  const remaining = check.ok ? checkSpend({ ledger: entries, attemptedCents: 1, now: Date.now() }).remainingCents : 0;
+  const remaining = checkSpend({ ledger: entries, attemptedCents: 1, now: Date.now() }).remainingCents;
   // Prefer an on-list item that only fails the weekly cap, so this demo still shows the
   // spending limit when the list allows the item. Otherwise the cheapest item that doesn't
   // fit, and the espresso machine (> $300) as a last resort. The guard still decides.

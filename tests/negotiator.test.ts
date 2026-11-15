@@ -35,6 +35,9 @@ const baseCtx: NegotiationContext = {
   remainingBudgetCents: 300_00,
   userMaxPriceCents: 120_00,
   priority: "save",
+  listMaxPriceCents: 120_00,
+  quantityRemaining: 3,
+  shoppingList: [{ name: "Wireless Earbuds", maxPriceUsd: 120, quantity: 3, quantityRemaining: 3 }],
 };
 
 async function collect(gen: AsyncGenerator<FeedEvent>) {
@@ -83,6 +86,14 @@ describe("negotiator", () => {
     expect(fairAsk.action).toBe("walk");
   });
 
+  it("walks when no approved shopping list was supplied to the model", async () => {
+    const r = fakeReasoner([{ action: "accept", offerPrice: 90, reasoning: ["Take it."], confidence: 0.9 }]);
+    const { shoppingList: _omit, ...noList } = baseCtx;
+    const d = await decide(noList, r);
+    expect(d.action).toBe("walk");
+    expect(d.guardrails.join(" ")).toMatch(/shopping list/);
+  });
+
   it("clamps a model offer above the user's max price", async () => {
     const r = fakeReasoner([{ action: "offer", offerPrice: 125, reasoning: ["Go big."], confidence: 0.9 }]);
     const d = await decide({ ...baseCtx, userMaxPriceCents: 100_00 }, r);
@@ -107,6 +118,37 @@ describe("end to end", () => {
     expect(purchased.entry.paidCents).toBe(90_00);
     expect(purchased.entry.savedCents).toBe(earbuds.listPriceCents - 90_00);
     expect(purchased.receipt.rail).toBe("simulated");
+  });
+
+  it("with no saved list, shop declines without negotiation rounds", async () => {
+    const r = fakeReasoner([new Error("SERV must not run")]);
+    const events = await collect(runShopping({ query: "wireless earbuds", maxPriceCents: 120_00, priority: "save" }, [], r));
+    expect(events.some((e) => e.type === "round")).toBe(false);
+    expect(events.some((e) => e.type === "blocked")).toBe(true);
+    expect(events.some((e) => e.type === "declined-offer")).toBe(true);
+    expect(r.calls).toHaveLength(0);
+  });
+
+  it("rejects a tampered ledger in the overspend demo", async () => {
+    const bad = signEntry({
+      id: "led_bad",
+      itemId: "earbuds",
+      itemName: "Wireless Earbuds",
+      sellerName: "Flexible Seller (mock)",
+      listPriceCents: 129_00,
+      paidCents: 90_00,
+      savedCents: 39_00,
+      timestamp: Date.now(),
+      receiptId: "sim_x",
+      rail: "simulated",
+      txHash: null,
+      explorerUrl: null,
+      testnetAmount: null,
+    });
+    const tampered = [{ ...bad, paidCents: 1_00 }];
+    const events = await collect(runOverspend(tampered, undefined, catalogList));
+    expect(events.some((e) => e.type === "error" && /signature/i.test(e.message))).toBe(true);
+    expect(events.some((e) => e.type === "purchased")).toBe(false);
   });
 
   it("the overspend demo is always blocked by the Spend Guard", async () => {

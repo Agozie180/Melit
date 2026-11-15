@@ -213,12 +213,9 @@ export function applyGuardrails(
   const lastOffer = [...ctx.history].reverse().find((h) => h.melitAction === "offer")?.melitOfferCents ?? 0;
   let { action, offerPriceCents } = d;
 
-  const onList =
-    ctx.listMaxPriceCents !== undefined
-      ? true
-      : ctx.shoppingList === undefined
-        ? true
-        : ctx.shoppingList.some((row) => normalizeItemName(row.name) === normalizeItemName(ctx.item.name));
+  const onList = Boolean(
+    ctx.shoppingList?.some((row) => normalizeItemName(row.name) === normalizeItemName(ctx.item.name)),
+  );
   if (!onList && action !== "walk") {
     guardrails.push("This item is not on your shopping list: walking away.");
     return { ...d, action: "walk", offerPriceCents: 0, guardrails };

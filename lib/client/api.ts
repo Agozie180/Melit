@@ -51,7 +51,18 @@ export const ledgerStore = {
     return EMPTY;
   },
   append(entry: LedgerEntry) {
-    localStorage.setItem(LEDGER_KEY, JSON.stringify([...ledgerStore.getSnapshot(), entry]));
+    const raw = localStorage.getItem(LEDGER_KEY);
+    let existing: LedgerEntry[] = EMPTY;
+    try {
+      const value = raw ? JSON.parse(raw) : [];
+      existing = Array.isArray(value) ? value : EMPTY;
+    } catch {
+      existing = EMPTY;
+    }
+    const next = [...existing, entry];
+    const encoded = JSON.stringify(next);
+    localStorage.setItem(LEDGER_KEY, encoded);
+    cache = { raw: encoded, parsed: next };
     listeners.forEach((l) => l());
   },
   clear() {

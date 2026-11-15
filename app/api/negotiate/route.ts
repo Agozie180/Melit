@@ -13,7 +13,7 @@ const BodySchema = z.object({
     maxPriceCents: z.number().int().positive().max(100_000_00),
     priority: z.enum(["save", "fast"]),
   }),
-  ledger: z.unknown(),
+  ledger: z.array(z.unknown()).max(500).default([]),
   list: z.unknown().optional(),
   profile: z.unknown().optional(),
   reviews: z.unknown().optional(),

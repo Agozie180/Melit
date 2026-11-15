@@ -67,7 +67,8 @@ export async function POST(req: Request) {
   if (evaluation.status !== "COMPLETED" || !evaluation.verdict) {
     return Response.json({ error: `Reppo evaluation is ${evaluation.status}, not COMPLETED.`, retryable: evaluation.status !== "FAILED" }, { status: 409 });
   }
-  if (evaluation.input !== null && evaluation.input !== buildReppoInput(summary)) {
+  const expectedInput = buildReppoInput(summary);
+  if (evaluation.input === null || evaluation.input !== expectedInput) {
     return Response.json({ error: "That Reppo evaluation is not about this negotiation.", retryable: false }, { status: 400 });
   }
 

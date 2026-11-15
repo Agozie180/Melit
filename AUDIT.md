@@ -54,13 +54,21 @@ Production https://melit.vercel.app on 15 Nov 2026 (deploy for `main` after the 
 
 `POST /api/shopping-list` signs whatever valid rows it receives. It does not record who sent them. Deleting `localStorage` removes signed purchases, and the server cannot see the rows that were not sent. Both are stated in the README. They are still true.
 
-### B6. The negotiator's guardrail is weaker than the payment gate
+### ~~B6. The negotiator's guardrail is weaker than the payment gate~~ (fixed 15 Nov 2026)
 
-In `applyGuardrails`, an omitted `shoppingList` is treated as "on list" (`shoppingList === undefined ? true : ...`). `authorizePurchase` still rejects a missing signed list, so this does not call the rail. A future caller that pays from `decide()` alone would not be safe.
+**Was wrong.** `applyGuardrails` treated a missing `shoppingList` (or `listMaxPriceCents` alone) as on-list.
+
+**Fix.** On-list requires a matching row in `shoppingList`. **Tests:** `tests/negotiator.test.ts` ("walks when no approved shopping list was supplied to the model").
 
 ### B7. CI and build
 
-`.github/workflows/test.yml` runs `npm ci`, `npm run test:coverage`, and `npm run build` (Next.js typecheck) on `main` and pull requests. Locally, on 15 Nov 2026 after the SERV fix, `npm test` reported 89 passing tests.
+`.github/workflows/test.yml` runs `npm ci`, `npm run test:coverage`, and `npm run build` (Next.js typecheck) on `main` and pull requests. Locally, on 15 Nov 2026 after the judge-audit pass, `npm test` reported 96 passing tests.
+
+### B8. Reppo / client races (fixed 15 Nov 2026)
+
+**Was wrong.** Purchases finished before `/api/agent` returned never queued for Reppo; double-submit could run two negotiations; overspend ignored tampered ledgers; Reppo feedback could pair any verdict when Reppo omitted `input`.
+
+**Fix.** Always enqueue purchased deals + `backfillReppoJobs` when Reppo configures; ref mutex on negotiate; ledger append reads storage directly; overspend fail-closed on bad ledger; require exact Reppo input match. **Tests:** `tests/negotiator.test.ts` (no-list shop, tampered overspend ledger).
 
 ## Checked, and not a finding
 
