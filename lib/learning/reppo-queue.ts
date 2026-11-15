@@ -3,6 +3,7 @@
 // queue runs on its own timer after deals finish.
 
 import type { ReppoJob, ReppoVerdict } from "./types";
+import { verdictIsReady } from "./reppo-verdict";
 
 export const REPPO_POLL_MS = 10_000;
 export const REPPO_MAX_ATTEMPTS = 5;
@@ -49,8 +50,33 @@ export function markPolled(
   result: { status: string; verdict: ReppoVerdict | null; error: string | null },
   now: number,
 ): ReppoJob[] {
-  if (result.status === "COMPLETED" && result.verdict) {
-    return update(jobs, dealId, () => ({ state: "verdict", remoteStatus: result.status, verdict: result.verdict, error: null }));
+  if (result.status === "COMPLETED" && verdictIsReady(result.verdict)) {
+    return update(jobs, dealId, () => ({
+      state: "verdict",
+      remoteStatus: result.status,
+      verdict: result.verdict,
+      error: null,
+    }));
+  }
+  if (result.status === "COMPLETED" && !verdictIsReady(result.verdict)) {
+    return update(jobs, dealId, (j) => {
+      const attempts = j.attempts + 1;
+      if (attempts >= REPPO_MAX_ATTEMPTS) {
+        return {
+          state: "failed",
+          remoteStatus: "COMPLETED",
+          error: "Reppo marked COMPLETED but never returned score and route.",
+          attempts,
+        };
+      }
+      return {
+        state: "pending",
+        remoteStatus: "PROCESSING",
+        error: "Reppo returned COMPLETED before score/route were ready; still polling.",
+        attempts,
+        retryAt: now + REPPO_POLL_MS,
+      };
+    });
   }
   if (result.status === "FAILED") {
     return update(jobs, dealId, () => ({ state: "failed", remoteStatus: result.status, error: result.error ?? "Reppo marked the evaluation FAILED." }));

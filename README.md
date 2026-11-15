@@ -8,14 +8,14 @@
 [![npm](https://img.shields.io/badge/npm-not%20published-lightgrey)](https://github.com/Agozie180/Melit/blob/main/package.json)
 [![program result](https://img.shields.io/badge/program%20result-not%20announced-lightgrey)](https://www.openserv.ai/hackathon-2)
 
-**SERV Hackathon Edition 02.** Main track: Kite. Secondary: Reppo. Judged on creativity, user readiness, and revenue potential. The published prize pool is **$5,000 total**. Per-track amounts were still TBA on the event page on 15 Nov 2026, so this README does not invent a split. There is no award yet, so the program badge says "not announced."
+**SERV Hackathon Edition 02.** Main track: **Kite**. Secondary: **Reppo**. Judged on creativity, user readiness, and revenue potential. Prize details stay on the [event page](https://www.openserv.ai/hackathon-2); there is no award yet, so the program badge says "not announced."
 
 The coverage badge is the line rate from `npm run test:coverage` on 15 Nov 2026: 46.32% of lines in `lib/` and `app/` (763/1647). That number includes the UI, which these tests do not render. `lib/guard/spend-guard.ts` is 100% lines. Melit is not an npm package. The blue badges are the public testnet wallet and the pieUSD token the app pays with. They are not a Sourcify-verified contract written by this repo.
 
 | | |
 | --- | --- |
 | Live app | https://melit.vercel.app |
-| Production check | Vercel production `dpl_3PaCYdWGiVNf7xi9AMUmi9yACEA9` is READY for `7af69c8`. A fetch of that URL on 15 Nov 2026 contained "Shopping list". |
+| Production check | Vercel production `dpl_DDf3wQgBvDGqPc6B7iozisRAMuPk` is READY for `d5fc3eb`. `GET https://melit.vercel.app/api/agent` reports `passport.runtimeReady: true` and `kite-passport-sandbox` in the rail list. |
 | Demo | [demo.md](./demo.md) is the 90-second script. [demo.mp4](./demo.mp4) is an older 1:55 cut and does not follow that script. |
 | Write-up | [SUBMISSION.md](./SUBMISSION.md) |
 | Judging brief | [JUDGING.md](./JUDGING.md) |
@@ -29,13 +29,15 @@ The coverage badge is the line rate from `npm run test:coverage` on 15 Nov 2026:
 
 People pay the sticker price because haggling is awkward and the money leaks out a little at a time. Melit negotiates with four mock sellers, shows the reasoning, and runs that check in server code before any payment. What it saved versus list price goes in a vault: 85% shown as yours, 15% as Melit's fee. That split is arithmetic. It is not a charge to a card.
 
+![Melit dashboard — shopping list, negotiation feed, Reppo track, and agent card on https://melit.vercel.app](docs/screenshots/melit-dashboard.png)
+
 ## What we built
 
 1. **A signed shopping list** of `{ name, maxPrice, quantity }`. That is what Melit can buy.
 2. **A $300 rolling 7-day cap.** That is how much it can spend. Both checks are in `authorizePurchase`, and a blocked result never calls a payment rail.
 3. **A negotiation.** Each round asks SERV Reasoning first. If the call fails or the JSON does not validate, the round is labelled **Fallback heuristic**.
-4. **An identity card** that says Passport sandbox only when `kpass` confirms it. On Vercel it shows the KiteAI testnet wallet and says it is not Passport-verified, or a labelled simulated id when there is no key.
-5. **A payment rail** that sends pieUSD on KiteAI testnet (chain 2368) when a throwaway key is set and the wallet can pay. A dry wallet, or no key, produces a receipt labelled Simulated or Recorded. On Vercel, Rail 1 runs only when `KPASS_RUNTIME_BUNDLE_B64` and session env are set (see `.env.example`); otherwise the deploy uses Rail 2.
+4. **An identity card** that says **Kite Passport sandbox** only when live `kpass agent status` succeeds in that request. Otherwise it shows the KiteAI testnet wallet (labelled not Passport-verified) or a simulated id. On https://melit.vercel.app the card may still read testnet wallet while `/api/agent` reports `passport.runtimeReady: true`.
+5. **A payment rail** that sends pieUSD on KiteAI testnet (chain 2368) when a throwaway key is set and the wallet can pay. A dry wallet, or no key, produces a receipt labelled Simulated or Recorded. Production runs Rail 1 when `KPASS_RUNTIME_BUNDLE_B64`, `KPASS_SESSION_ID`, and related env are set (see `.env.example`); otherwise only Rail 2 and labelled fallbacks run.
 6. **A learning loop.** Owner notes and seller reviews move a capped strategy. Reppo is called only when `REPPO_API_KEY` is set, and a score appears only after Reppo returns one.
 
 ## How a purchase runs
@@ -86,7 +88,7 @@ Numbers below are what the tests assert. Re-run the command rather than trusting
 | The hidden floor is not in the SERV prompt | the user message does not match `/floor/i` | `npm test -- tests/negotiator.test.ts` |
 | Line coverage of `lib/` and `app/` | 46.32% lines (763/1647). Statements 43.95%. Branches 36.67%. Functions 39.69%. `spend-guard.ts` is 100% lines. UI files are 0% | `npm run test:coverage` |
 
-On 15 Nov 2026, `npm test` reported 96 passing tests. The coverage row is from the same day's `npm run test:coverage`.
+On 15 Nov 2026, `npm test` reported 98 passing tests. The coverage row is from the same day's `npm run test:coverage`.
 
 ## Try it in 30 seconds
 
@@ -103,12 +105,12 @@ No API key is required. Without one, the banner says so and every round is label
 - The list and the ledger live in this browser. **Reset demo**, or clearing storage, starts the week over and restores quantities. On the public demo every visitor is paid from one shared testnet wallet, so both controls are per browser.
 - `POST /api/shopping-list` signs any valid rows. The signature proves this server saw them. It does not prove which person approved them.
 - Rate limits live in each serverless instance. A burst can land on more than one instance. See [Abuse limits](#how-the-spend-guard-works).
-- Passport on Vercel needs `npm run kite:export-runtime` pasted as `KPASS_RUNTIME_BUNDLE_B64` plus `KPASS_SESSION_ID` and a public `SELLER_BASE_URL`. Without those secrets the live identity is not Passport-verified.
+- Passport on Vercel needs `npm run kite:export-runtime` pasted as `KPASS_RUNTIME_BUNDLE_B64` plus `KPASS_SESSION_ID` and a public `SELLER_BASE_URL`. Without them Rail 1 is off. With them, Rail 1 may run even if the agent card still shows a testnet wallet until `kpass agent status` confirms in serverless.
 - The 15% line in the vault is not money collected from anyone.
 
 ## Non-goals
 
-Not a store, not a card product, not a Dolphin model, and not a Passport-verified agent on the public deploy. Seller floors stay server-side. The model is not the spend authority.
+Not a store, not a card product, not a Dolphin model, and not a merchant allowlisted for Passport checkout yet. The UI never claims Passport verification that `kpass` did not confirm. Seller floors stay server-side. The model is not the spend authority.
 
 ## The problem
 
@@ -174,7 +176,7 @@ lib/
   adapters/reppo.ts         Reppo Eval Router client (POST/GET /api/v1/agents/evals)
 app/api/feedback/route.ts   POST owner feedback or "learn from this Reppo verdict"
 app/api/reppo/route.ts      POST submit a signed purchase summary to Reppo; GET /api/reppo/[id] polls it
-scripts/kite-setup.mjs      Guided `kpass` sandbox setup (login check, faucet, agent, 7-day session)
+scripts/kite-setup.mjs      Guided `kpass` sandbox setup (login check, faucet, agent, 30-day session)
 tests/                      vitest: spend guard, ledger tampering, sellers, negotiator, payment rails
 ```
 
@@ -203,9 +205,9 @@ Reasoning, identity and payments each sit behind an interface, so they can be sw
 
 Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling forward, future-dated entries, invalid amounts, a client-supplied fake total, an edited amount, a back-dated entry, a forged signature and a malformed ledger. They also cover an off-list purchase, a price over the list max, a used-up quantity, a listed item that still fails the weekly cap, and a tampered list (edited max, added item, or a `remaining` field) that cannot get past the server.
 
-**Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week, which also restores shopping-list quantities. The Reppo job track is also per-browser (localStorage), not server-backed. The Reset demo button does exactly this on purpose. It does not clear the shopping list. Saving a new list is the owner's approval, so anyone who can use the demo as you can also save a wider list. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so both controls apply per browser, not per wallet. A production version would persist the list and the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
+**Server-held financial state.** The signed shopping list and purchase ledger live in shared storage (Vercel KV / Upstash when `KV_REST_*` or `UPSTASH_REDIS_*` is set, otherwise `data/demo-sessions/` on disk). A `melit_sid` httpOnly cookie ties each browser to its rows. `GET /api/state` is the source of truth for the Spend Guard; clearing `localStorage` no longer resets the $300 week. **Reset demo** clears only the server ledger (`DELETE /api/state`), not the list. The Reppo job queue is still per-browser in `localStorage`.
 
-**Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend`, `/api/shopping-list`, and `/api/reppo` (submit and poll) use `lib/server/rate-limit.ts`. `POST /api/reppo` also dedupes each deal and enforces a 20-second gap per IP before a new submission. `GET /api/reppo/[id]` rejects malformed ids. These counters live in each serverless instance, and Vercel spreads one client's requests over several instances (visible in the `X-RateLimit-Remaining` header on the shared limiter), so on the deployment they bound abuse per instance rather than exactly. A Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those routes) is also configured, but a 24-request burst test did not trigger it, so treat it as unverified. A shared counter (e.g. Upstash Redis) is the proper fix and is on the roadmap. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
+**Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend`, `/api/shopping-list`, and `/api/reppo` (submit and poll) use `lib/server/rate-limit.ts` with Redis-backed counters when KV/Upstash credentials are configured (shared across serverless instances). Without Redis, limits are in-process only. `POST /api/reppo` also dedupes each deal and enforces a 20-second gap per IP before a new submission. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
 
 ## Payments on KiteAI testnet
 
@@ -214,8 +216,8 @@ Everything runs on **KiteAI testnet** (chain ID 2368, RPC `https://rpc-testnet.g
 The order of checks for every purchase:
 
 1. **Spend Guard first.** The signed shopping list and the $300 cap both have to approve the exact amount, or nothing else runs (`lib/negotiation/run.ts`).
-2. **Rail 1: Kite Passport sandbox.** The server runs `kpass sandbox status`, and refuses to continue unless kpass confirms sandbox mode. It then runs `kpass session execute --method GET --url <mock seller checkout> --idempotency-key <order id>` as a child process with an explicit argument list (no shell). The mock seller's checkout is a real x402 endpoint built with `@x402/next`: it answers HTTP 402 with exact-scheme pieUSD requirements on `eip155:2368` and settles through the Pieverse facilitator. It only charges orders signed by Melit after Guard approval. The approved Passport session (3 pieUSD over 7 days) is a **second** limit layer.
-3. **Rail 2: direct testnet transfer.** If Rail 1 fails for any reason other than the two exceptions below (not logged in, not sandbox, `host_not_in_executable_catalog`, `sandbox_merchant_not_allowlisted`, unreachable seller, and so on), Melit pays the mock seller straight from `AGENT_PRIVATE_KEY`. It confirms the RPC reports chain 2368, then:
+2. **Rail 1: Kite Passport sandbox.** The server runs `kpass sandbox status`, and refuses to continue unless kpass confirms sandbox mode. It then runs `kpass session execute --method GET --url <mock seller checkout> --idempotency-key <order id>` as a child process with an explicit argument list (no shell). The mock seller's checkout is a real x402 endpoint built with `@x402/next`: it answers HTTP 402 with exact-scheme pieUSD requirements on `eip155:2368` and settles through the Pieverse facilitator. It only charges orders signed by Melit after Guard approval. The approved Passport session (3 pieUSD over **30 days** on the public hackathon deploy) is a **second** limit layer.
+3. **Rail 2: direct testnet transfer.** If Rail 1 fails for any reason other than the two exceptions below (not logged in, not sandbox, unreachable seller, and so on), Melit pays the mock seller straight from `AGENT_PRIVATE_KEY` only after checking Passport activity for the idempotency key so a timeout does not double-pay. It confirms the RPC reports chain 2368, then:
    - **Gasless pieUSD (default).** The agent signs an EIP-3009 `transferWithAuthorization` for pieUSD with viem (the x402 "exact" scheme, `@x402/evm`). The Pieverse x402 facilitator verifies it, submits it on KiteAI testnet and pays the KITE gas. The x402 client's own spend control refuses to sign anything above the weekly cap, which is a third limit layer.
    - **Plain ERC-20 transfer.** Used when the wallet doesn't hold enough pieUSD but has faucet test USDT and KITE for gas.
 
@@ -233,13 +235,12 @@ Each ledger entry stores the rail that paid, the tx hash and a KiteScan link, an
 
 **Kite Passport status (tested Nov 15, 2026):**
 - **Production backend** (`passport.prod.gokite.ai`): in sandbox mode, `kpass agent register` aborts with `sandbox mode mismatch: server reported X-Kite-Mode="live"`, and the faucet is "disabled on production".
-- **Staging backend** (`KPASS_BASE_URL=https://passport.staging.gokite.ai`): sandbox works end to end. Melit's agent is registered, its faucet funded the wallets with pieUSD on chain 2368, and a "Melit weekly budget" session (3 pieUSD, 7 days) was approved with a passkey.
-- **What still blocks Rail 1:** `kpass session execute` against the mock seller returns `payment_target_forbidden … reason="sandbox_merchant_not_allowlisted"`. Kite only lets sessions pay allowlisted merchants, and listing a seller requires account KYC. So today every purchase genuinely tries Rail 1, records Kite's refusal in the receipt's attempt trail, and settles through Rail 2.
-- Once the seller host is allowlisted, Rail 1 pays first with no code change.
+- **Staging backend** (`KPASS_BASE_URL=https://passport.staging.gokite.ai`): sandbox works end to end. Melit's agent is registered, its faucet funded the wallets with pieUSD on chain 2368, and a "Melit hackathon judge window" session (3 pieUSD, **30 days**) can be approved with a passkey (`npm run kite:setup` uses `--ttl 30d`).
+- **Merchant allowlist:** before execute, Melit runs best-effort `kpass sandbox merchant register` (and related) for `SELLER_BASE_URL`, retries once on `sandbox_merchant_not_allowlisted`, and refuses to treat Rail 1 as settled without HTTP 2xx and an on-chain reference from Passport. If Kite still blocks the host, the receipt shows that refusal and Rail 2 pays only after activity confirms no Passport settlement.
 
 **Why a public seller URL:** with `kpass session execute`, the Passport *backend* calls the seller URL and settles the payment, so the mock seller checkout must be reachable from the internet (`SELLER_BASE_URL`, for example your Vercel deploy). A `localhost` seller can't be paid through Rail 1, so those payments use Rail 2.
 
-**Demo video vs deployed site:** kpass needs a local terminal and a passkey for first-time setup (`npm run kite:setup`). After export, Vercel can run the bundled CLI from `KPASS_RUNTIME_BUNDLE_B64`. Without that secret the deployed site uses Rail 2 only. The live demo at https://melit.vercel.app makes **real KiteAI testnet payments** from a throwaway wallet funded with faucet pieUSD, at `MELIT_TESTNET_SCALE=0.001` (a $300 week = 0.3 pieUSD). `MELIT_SIMULATED_FALLBACK=1` covers the case where that wallet runs dry, and those receipts are labelled Simulated. With `MELIT_PAYMENT_MODE=recorded` the site instead replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
+**Demo video vs deployed site:** kpass needs a local terminal and a passkey for first-time setup (`npm run kite:setup`). After export, Vercel can run the bundled CLI from `KPASS_RUNTIME_BUNDLE_B64` (configured on https://melit.vercel.app as of `d5fc3eb`). Without that secret a deploy uses Rail 2 only. The live demo makes **real KiteAI testnet payments** from a throwaway wallet funded with faucet pieUSD, at `MELIT_TESTNET_SCALE=0.001` (a $300 week = 0.3 pieUSD). `MELIT_SIMULATED_FALLBACK=1` covers the case where that wallet runs dry, and those receipts are labelled Simulated. With `MELIT_PAYMENT_MODE=recorded` the site instead replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
 
 ## Reppo track: Melit learns from feedback
 
@@ -303,8 +304,8 @@ It only uses negotiations you ran in this browser. Nothing is pre-filled or seed
 | SERV Reasoning negotiation decisions | **Real** when `OPENSERV_API_KEY` is set. Rounds that use the fallback are labelled. |
 | Spend Guard, shopping list and ledger signing | **Real**, enforced in server code, unit tested. The list is what it can buy; the $300 cap is how much it can spend. |
 | Sellers and marketplace | **Mock sellers**: four labelled sellers with deterministic rules. Only their checkout endpoint is real x402. |
-| Agent identity | **Kite Passport sandbox** only when kpass confirms it live. Otherwise **testnet wallet** (a real key, not Passport-verified) or **Simulated**. |
-| Payments, Rail 1 | **Real Kite Passport sandbox call** with an approved session, from a local server. Kite currently refuses non-allowlisted merchants, and the receipt shows that refusal. |
+| Agent identity | **Kite Passport sandbox** only when live `kpass agent status` succeeds. Otherwise **testnet wallet** (real key, labelled not Passport-verified) or **Simulated**. |
+| Payments, Rail 1 | **Real Kite Passport sandbox call** with an approved session on local and Vercel deploys when the runtime bundle is set. Kite currently refuses non-allowlisted merchants, and the receipt shows that refusal. |
 | Payments, Rail 2 | **Real testnet payments.** Gasless pieUSD via the x402 facilitator, or an ERC-20 transfer. Live on https://melit.vercel.app with KiteScan links. |
 | Recorded / simulated receipts | **No money moves.** Shown as "Recorded receipt (replay)" or "Simulated payment". |
 
@@ -331,7 +332,7 @@ Without a key the app still runs, but every round is labelled **Fallback heurist
 ### Testnet payments (local)
 
 1. **Rail 2 (quickest).** Create a throwaway wallet that you'll only use on testnet and set `AGENT_PRIVATE_KEY` and `MOCK_SELLER_PAYTO` in `.env.local`. Fund it with pieUSD from the Kite Passport faucet (`npm run kite:setup -- --base-url https://passport.staging.gokite.ai --agent-wallet <address>`), which needs no gas thanks to the facilitator. Or claim KITE and test USDT at https://faucet.gokite.ai. Check funding with `npm run testnet:balance -- <address>`.
-2. **Rail 1 (Kite Passport sandbox).** Install the CLI (`curl -fsSL https://cli.gokite.ai/install.sh | bash`) and sign in (`kpass login`, or `kpass login init --email` for an email code). Run `npm run kite:setup -- --base-url https://passport.staging.gokite.ai`, which switches on sandbox mode, requests faucet pieUSD, registers the agent and creates the 7-day "Melit weekly budget" session. Approve the printed URL with your passkey. Then set `MELIT_KPASS=1`, `KPASS_BASE_URL`, `KPASS_SESSION_ID`, `SELLER_BASE_URL` (a public deploy of this app) and the same `MELIT_ORDER_SECRET` locally and on that deploy.
+2. **Rail 1 (Kite Passport sandbox).** Install the CLI (`curl -fsSL https://cli.gokite.ai/install.sh | bash`) and sign in (`kpass login`, or `kpass login init --email` for an email code). Run `npm run kite:setup -- --base-url https://passport.staging.gokite.ai`, which switches on sandbox mode, requests faucet pieUSD, registers the agent and creates a **30-day** "Melit hackathon judge window" session (`--ttl 30d`). Approve the printed URL with your passkey. Then set `MELIT_KPASS=1`, `KPASS_BASE_URL`, `KPASS_SESSION_ID`, `SELLER_BASE_URL` (a public deploy of this app) and the same `MELIT_ORDER_SECRET` locally and on that deploy.
 3. Optionally set `MELIT_RECORD_RECEIPTS=1` to save real receipts to `data/recorded-receipts.json` for the deployed replay.
 
 ### Deploy to Vercel
@@ -345,7 +346,7 @@ Never put a mainnet key or a funded personal wallet in any env var. `AGENT_PRIVA
 ## Roadmap
 
 - Get the mock seller host allowlisted as a Kite sandbox merchant, so Rail 1 pays first instead of hitting `sandbox_merchant_not_allowlisted`.
-- A server-side ledger and shopping list, so the weekly cap and the allowlist survive a cleared browser.
+- Move the Reppo job queue to the server (still client-only today).
 - A shared rate-limit store, so per-IP limits hold across serverless instances.
 - Real merchant integrations and multi-seller comparison.
 

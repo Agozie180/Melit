@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { duplicateItemMessage } from "@/lib/shopping/list";
 import { ShoppingListItemSchema, signShoppingList } from "@/lib/server/shopping-list";
+import { setSignedList } from "@/lib/server/demo-state";
 import { checkRateLimit, withRemaining } from "@/lib/server/rate-limit";
+import { sessionIdFromRequest } from "@/lib/server/request-session";
 
 const BodySchema = z.object({
   items: z.array(ShoppingListItemSchema).max(30),
@@ -9,7 +11,7 @@ const BodySchema = z.object({
 
 /** The owner saves the allowlist. The response is the only list the Spend Guard will trust. */
 export async function POST(req: Request) {
-  const { limited, remaining } = checkRateLimit(req, "shopping-list");
+  const { limited, remaining } = await checkRateLimit(req, "shopping-list");
   if (limited) return limited;
   const body = BodySchema.safeParse(await req.json().catch(() => null));
   if (!body.success) {
@@ -20,5 +22,8 @@ export async function POST(req: Request) {
   }
   const dup = duplicateItemMessage(body.data.items);
   if (dup) return Response.json({ error: dup }, { status: 400 });
-  return withRemaining(Response.json(signShoppingList(body.data.items)), remaining);
+  const signed = signShoppingList(body.data.items);
+  const sid = sessionIdFromRequest(req);
+  if (sid) await setSignedList(sid, signed);
+  return withRemaining(Response.json(signed), remaining);
 }

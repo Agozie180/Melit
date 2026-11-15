@@ -34,7 +34,7 @@ The page shows:
 >
 > special_mention, TBA
 
-Per-track dollar amounts were still TBA on 15 Nov 2026. The README names the $5,000 total and does not name a Kite or Reppo purse.
+Per-track dollar amounts were still TBA on 15 Nov 2026. The README names **SERV Hackathon Edition 02**, the **Kite** and **Reppo** tracks, and links here for prize wording copied from the event page.
 
 ## Tracks, copied verbatim
 
@@ -84,7 +84,9 @@ The page does not say how many points each axis is worth. This is the evidence a
 
 **Creativity.** Two controls with different jobs: a signed allowlist (what it can buy) and a rolling $300 week (how much). Off-list seller pushes are declined until the owner presses **Approve and save**. The sellers are four scripts in `lib/market/catalog.ts`. That is a specific mechanism, not a general chatbot, and it is not a real shop.
 
-**User readiness.** The app has an empty list, a loading line (`payments: checking…` until `/api/agent` returns), a blocked card, and a layout that fits a ~390px phone width without horizontal overflow (checked 15 Nov 2026). A judge can run it with no API key. https://melit.vercel.app/ serves the shopping list; negotiation rounds show **SERV Reasoning** or **Fallback heuristic** per round. The card is still a testnet wallet, `verified: false`.
+**User readiness.** The app has an empty list, a loading line (`payments: checking…` until `/api/agent` returns), a blocked card, and a layout that fits a ~390px phone width without horizontal overflow. A judge can run it with no API key. https://melit.vercel.app/ serves the shopping list; negotiation rounds show **SERV Reasoning** or **Fallback heuristic** per round. The **signed list and ledger** persist server-side per browser session (Vercel KV when configured), so the **$300 week** survives clearing storage. Production `/api/agent` reports `passport.runtimeReady: true` and Rail **kite-passport-sandbox** when Vercel secrets are set. Rail 1 registers the seller host, retries on allowlist errors, and requires a Passport settlement reference before succeeding; otherwise Rail 2 pays after an activity check. Reppo statuses mirror the API and link to eval.reppo.xyz for verification.
+
+**Passport / allowlist window for judges (15 Nov 2026).** Seller host for allowlisting: `https://melit.vercel.app` (mock seller x402 checkout under `/api/sellers/.../checkout`). Session cap: 3 pieUSD total over 30 days (staging sandbox). Merchant allowlisting is a Kite Passport ops step, not something Melit can extend in git; the 30-day change is the **session lifetime** judges can use once allowlisted.
 
 **Revenue potential.** The vault shows 85% of (list price − paid price) as the owner's share and 15% as Melit's fee. `splitSavings` in `lib/money.ts` is that arithmetic. No shopper and no merchant is charged. The fee is not collected on chain.
 

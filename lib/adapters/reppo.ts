@@ -9,6 +9,7 @@
 // A text evaluation costs 440 credits and is only charged once it COMPLETES.
 
 import type { ReppoVerdict } from "../learning/types";
+import { verdictIsReady } from "../learning/reppo-verdict";
 
 const DEFAULT_BASE_URL = "https://eval.reppo.xyz/api/v1";
 const TIMEOUT_MS = 15_000;
@@ -56,6 +57,7 @@ export function parseEvaluation(raw: unknown): ReppoEvaluation {
     throw new ReppoError("Reppo returned an unexpected evaluation shape", 200, true);
   }
   let verdict: ReppoVerdict | null = null;
+  let statusOut: ReppoRemoteStatus = status;
   if (status === "COMPLETED") {
     const result = obj(data.result);
     const rubric: Record<string, number> = {};
@@ -79,7 +81,7 @@ export function parseEvaluation(raw: unknown): ReppoEvaluation {
           return { model, overall: num(obj(e).overall), reasoning: reasoningByModel.get(model) ?? null };
         })
       : [...reasoningByModel].slice(0, 8).map(([model, reasoning]) => ({ model, overall: null, reasoning }));
-    verdict = {
+    const candidate: ReppoVerdict = {
       score: num(result.score) ?? num(data.score),
       route: str(result.route, 20) ?? str(data.route, 20),
       decision: str(result.decision, 20),
@@ -89,8 +91,16 @@ export function parseEvaluation(raw: unknown): ReppoEvaluation {
       evaluators,
       completedAt: str(data.completedAt, 40),
     };
+    if (verdictIsReady(candidate)) verdict = candidate;
+    else statusOut = "PROCESSING";
   }
-  return { id, status, input: typeof data.input === "string" ? data.input : null, verdict, error: status === "FAILED" ? (str(data.error, 300) ?? "Reppo marked the evaluation FAILED (not charged).") : null };
+  return {
+    id,
+    status: statusOut,
+    input: typeof data.input === "string" ? data.input : null,
+    verdict,
+    error: status === "FAILED" ? (str(data.error, 300) ?? "Reppo marked the evaluation FAILED (not charged).") : null,
+  };
 }
 
 function describeHttpError(status: number, body: string): ReppoError {

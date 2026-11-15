@@ -46,3 +46,6 @@ next-env.d.ts
 /vendor/.extract/
 /vendor/.kpass-dl.tar.gz
 /vendor/kpass-linux-amd64
+
+# server-persisted demo sessions (local / vitest file fallback)
+/data/demo-sessions/

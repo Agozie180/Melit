@@ -51,7 +51,12 @@ export function useReppoQueue(enabled: boolean) {
           }
         } else if (action?.type === "poll" && action.job.evalId) {
           try {
-            const res = await call<{ status: string; verdict: ReppoVerdict | null; error: string | null }>(`/api/reppo/${encodeURIComponent(action.job.evalId)}`);
+            const res = await call<{
+              status: string;
+              verdict: ReppoVerdict | null;
+              error: string | null;
+              terminal?: boolean;
+            }>(`/api/reppo/${encodeURIComponent(action.job.evalId)}`);
             reppoJobsStore.set((jobs) => markPolled(jobs, action.job.dealId, res, Date.now()));
           } catch (err) {
             const e = err as Error & { retryable?: boolean };

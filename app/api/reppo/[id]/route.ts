@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { ReppoError, getReppoClient } from "@/lib/adapters/reppo";
+import { verdictIsReady } from "@/lib/learning/reppo-verdict";
 import { checkRateLimit, withRemaining } from "@/lib/server/rate-limit";
 
 const IdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,120}$/);
 
 /** Current state of one Reppo evaluation, straight from Reppo. */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { limited, remaining } = checkRateLimit(req, "reppo");
+  const { limited, remaining } = await checkRateLimit(req, "reppo");
   if (limited) return limited;
   const { id } = await ctx.params;
   if (!IdSchema.safeParse(id).success) {
@@ -14,8 +15,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   }
   try {
     const evaluation = await getReppoClient().get(id);
+    const verifyUrl = `https://eval.reppo.xyz/evaluations/${encodeURIComponent(evaluation.id)}`;
     return withRemaining(
-      Response.json({ evalId: evaluation.id, status: evaluation.status, verdict: evaluation.verdict, error: evaluation.error }),
+      Response.json({
+        evalId: evaluation.id,
+        status: evaluation.status,
+        verdict: evaluation.verdict,
+        error: evaluation.error,
+        input: evaluation.input,
+        verifyUrl,
+        terminal: (evaluation.status === "COMPLETED" && verdictIsReady(evaluation.verdict)) || evaluation.status === "FAILED",
+      }),
       remaining,
     );
   } catch (err) {

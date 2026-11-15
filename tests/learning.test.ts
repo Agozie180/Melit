@@ -320,6 +320,16 @@ describe("Reppo is asynchronous and optional", () => {
     expect(markError(enqueue([], "c", 0), "c", "402 credits", false, 0)[0].state).toBe("failed");
   });
 
+  it("treats COMPLETED without score/route as still processing", () => {
+    const e = parseEvaluation({ id: "cm999", status: "COMPLETED", input: "x", result: null, score: null, route: null });
+    expect(e.status).toBe("PROCESSING");
+    expect(e.verdict).toBeNull();
+    let jobs = markSubmitted(enqueue([], "deal_x", 0), "deal_x", "cm999", "QUEUED", 0);
+    jobs = markPolled(jobs, "deal_x", { status: "COMPLETED", verdict: null, error: null }, 5_000);
+    expect(jobs[0].state).toBe("pending");
+    expect(jobs[0].remoteStatus).toBe("PROCESSING");
+  });
+
   it("parses a completed Reppo evaluation", () => {
     const e = parseEvaluation({
       id: "cm123",

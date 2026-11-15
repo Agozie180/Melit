@@ -94,13 +94,23 @@ if (agentWallet) {
 
 kpass(["agent", "register", "--type", agentType], { allowFail: true });
 
+const sellerHost = argValue("--seller-host") ?? process.env.SELLER_BASE_URL;
+if (sellerHost) {
+  let host = sellerHost;
+  try {
+    host = new URL(sellerHost.startsWith("http") ? sellerHost : `https://${sellerHost}`).host;
+  } catch {}
+  kpass(["sandbox", "merchant", "register", "--host", host], { allowFail: true });
+  kpass(["merchant", "register", "--url", sellerHost.replace(/\/+$/, "")], { allowFail: true });
+}
+
 const session = kpass(
   [
     "session",
     "create",
     "--separate",
     "--task-summary",
-    "Melit weekly budget",
+    "Melit hackathon judge window",
     "--max-amount-per-tx",
     String(maxPerTx),
     "--max-total-amount",
@@ -108,7 +118,7 @@ const session = kpass(
     "--assets",
     "pieUSD",
     "--ttl",
-    "7d",
+    "30d",
     "--no-browser",
     "--no-wait",
   ],

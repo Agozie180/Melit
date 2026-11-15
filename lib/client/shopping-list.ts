@@ -40,8 +40,10 @@ export const listStore = {
   getServerSnapshot(): SignedShoppingList | null {
     return null;
   },
-  replace(list: SignedShoppingList) {
-    localStorage.setItem(LIST_KEY, JSON.stringify(list));
+  replace(list: SignedShoppingList | null) {
+    if (list) localStorage.setItem(LIST_KEY, JSON.stringify(list));
+    else localStorage.removeItem(LIST_KEY);
+    listCache = undefined;
     listListeners.forEach((listener) => listener());
   },
 };

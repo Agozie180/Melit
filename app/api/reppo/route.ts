@@ -17,7 +17,7 @@ const BodySchema = z.object({ summary: z.unknown() });
 
 /** Submit one finished purchase to Reppo for evaluation. Returns as soon as Reppo has queued it. */
 export async function POST(req: Request) {
-  const { limited, remaining } = checkRateLimit(req, "reppo");
+  const { limited, remaining } = await checkRateLimit(req, "reppo");
   if (limited) return limited;
   const body = BodySchema.safeParse(await req.json().catch(() => null));
   if (!body.success) return Response.json({ error: "Invalid request." }, { status: 400 });
