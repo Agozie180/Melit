@@ -2,6 +2,7 @@ import type { FeedEvent, NegotiationRound } from "@/lib/types";
 import { formatUsd } from "@/lib/money";
 import { Badge, Card, CardTitle } from "./ui";
 import { AttemptTrail, ReceiptDetails } from "./Receipt";
+import { Stars } from "./ReputationCard";
 
 export interface FeedRun {
   id: string;
@@ -125,6 +126,15 @@ function RunView({ run }: { run: FeedRun }) {
                   <p className="font-semibold">Payment of {formatUsd(e.priceCents)} didn&apos;t go through. Nothing was bought.</p>
                   <AttemptTrail attempts={e.attempts} />
                   {e.attempts.length === 0 && <p className="mt-1 text-xs">{e.message}</p>}
+                </li>
+              );
+            case "seller-review":
+              return (
+                <li key={i} className="feed-in flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-neutral-600">
+                  <span className="font-semibold uppercase text-neutral-500">Seller review</span>
+                  <Stars rating={e.review.rating} />
+                  <span>“{e.review.text}”</span>
+                  <Badge>{e.review.pressure} pressure</Badge>
                 </li>
               );
             case "error":

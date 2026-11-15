@@ -16,14 +16,17 @@ export function RequestForm({
   catalog,
   busy,
   onSubmit,
+  defaultPriority = "save",
 }: {
   catalog: PublicItem[];
   busy: boolean;
   onSubmit: (req: ShoppingRequest) => void;
+  defaultPriority?: Priority;
 }) {
   const [query, setQuery] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [priority, setPriority] = useState<Priority>("save");
+  const [chosenPriority, setPriority] = useState<Priority | null>(null);
+  const priority = chosenPriority ?? defaultPriority;
   const [error, setError] = useState<string | null>(null);
 
   function submit(e: FormEvent) {

@@ -11,11 +11,36 @@ import { VaultCard } from "./components/VaultCard";
 import { RequestForm } from "./components/RequestForm";
 import { NegotiationFeed, type FeedRun } from "./components/NegotiationFeed";
 import { LedgerTable } from "./components/LedgerTable";
+import { StrategyCard } from "./components/StrategyCard";
+import { ReputationCard } from "./components/ReputationCard";
+import { DealFeedback } from "./components/DealFeedback";
+import { MetricsCard } from "./components/MetricsCard";
+import { LearningLog } from "./components/LearningLog";
+import {
+  dealsStore,
+  learningLogStore,
+  profileStore,
+  recordDeal,
+  recordSellerReview,
+  reppoJobsStore,
+  resetLearning,
+  reviewsStore,
+  sendOwnerFeedback,
+} from "@/lib/client/learning";
+import { useReppoQueue } from "@/lib/client/useReppoQueue";
+import type { SellerReview } from "@/lib/learning/types";
 
 export default function Dashboard() {
   const [info, setInfo] = useState<AgentInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const ledger = useSyncExternalStore(ledgerStore.subscribe, ledgerStore.getSnapshot, ledgerStore.getServerSnapshot);
+  const profile = useSyncExternalStore(profileStore.subscribe, profileStore.getSnapshot, profileStore.getServerSnapshot);
+  const deals = useSyncExternalStore(dealsStore.subscribe, dealsStore.getSnapshot, dealsStore.getServerSnapshot);
+  const reviews = useSyncExternalStore(reviewsStore.subscribe, reviewsStore.getSnapshot, reviewsStore.getServerSnapshot);
+  const learningLog = useSyncExternalStore(learningLogStore.subscribe, learningLogStore.getSnapshot, learningLogStore.getServerSnapshot);
+  const reppoJobs = useSyncExternalStore(reppoJobsStore.subscribe, reppoJobsStore.getSnapshot, reppoJobsStore.getServerSnapshot);
+  const reppoConfigured = Boolean(info?.reppo?.configured);
+  useReppoQueue(reppoConfigured);
   const [runs, setRuns] = useState<FeedRun[]>([]);
   const [busy, setBusy] = useState(false);
   const now = useSyncExternalStore(clockStore.subscribe, clockStore.getSnapshot, clockStore.getServerSnapshot);
@@ -32,6 +57,7 @@ export default function Dashboard() {
       : info.payments.mode === "recorded"
         ? "recorded testnet receipts, no new payments"
         : "simulated, no money moves";
+  const sellers = Array.from(new Map((info?.catalog ?? []).map((i) => [i.sellerId, { id: i.sellerId, name: i.sellerName }])).values());
   const spentCents = spentInWindow(ledger, now);
   const savedCents = ledger.reduce((sum, e) => sum + Math.max(0, e.savedCents), 0);
 
@@ -41,15 +67,28 @@ export default function Dashboard() {
       setBusy(true);
       const id = crypto.randomUUID();
       setRuns((prev) => [{ id, kind, events: [], running: true }, ...prev]);
+      let review: SellerReview | null = null;
       const push = (e: FeedEvent) => {
         if (e.type === "purchased") {
           ledgerStore.append(e.entry);
+        }
+        if (e.type === "seller-review") {
+          review = e.review;
+          recordSellerReview(e.review);
+        }
+        if (e.type === "summary") {
+          recordDeal(e.summary, review, reppoConfigured);
+          return;
         }
         if (e.type === "done") return;
         setRuns((prev) => prev.map((r) => (r.id === id ? { ...r, events: [...r.events, e] } : r)));
       };
       try {
-        await streamEvents(url, { ...body, ledger: ledgerStore.getSnapshot() }, push);
+        await streamEvents(
+          url,
+          { ...body, ledger: ledgerStore.getSnapshot(), profile: profileStore.getSnapshot(), reviews: reviewsStore.getSnapshot() },
+          push,
+        );
       } catch (err) {
         push({ type: "error", message: `${(err as Error).message}. Nothing was bought.` });
       } finally {
@@ -57,7 +96,7 @@ export default function Dashboard() {
         setBusy(false);
       }
     },
-    [busy],
+    [busy, reppoConfigured],
   );
 
   const shop = (request: ShoppingRequest) => run("shop", "/api/negotiate", { request });
@@ -79,7 +118,8 @@ export default function Dashboard() {
             than $300 in any 7 days.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
-            Kite track · Mock sellers · payments: {paymentsLabel} · decisions by SERV Reasoning
+            Kite + Reppo tracks · Mock sellers · payments: {paymentsLabel} · decisions by SERV Reasoning ·{" "}
+            {info ? (reppoConfigured ? "purchases judged by Reppo" : "Reppo judge not configured") : "…"}
           </p>
         </div>
         <AgentCard info={info} />
@@ -98,7 +138,7 @@ export default function Dashboard() {
         <div className="space-y-4">
           <BudgetGauge spentCents={spentCents} capCents={capCents} />
           <VaultCard savedCents={savedCents} purchases={ledger.length} />
-          <RequestForm catalog={info?.catalog ?? []} busy={busy} onSubmit={shop} />
+          <RequestForm catalog={info?.catalog ?? []} busy={busy} onSubmit={shop} defaultPriority={profile.priority === "speed" ? "fast" : "save"} />
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -117,9 +157,19 @@ export default function Dashboard() {
               Reset demo
             </button>
           </div>
+          <StrategyCard
+            profile={profile}
+            lastEvent={learningLog.at(-1) ?? null}
+            onReset={resetLearning}
+            disabled={busy}
+          />
+          <ReputationCard reviews={reviews} sellers={sellers} />
         </div>
         <div className="space-y-4">
           <NegotiationFeed runs={runs} />
+          <DealFeedback deals={deals} jobs={reppoJobs} log={learningLog} reppoConfigured={reppoConfigured} onFeedback={sendOwnerFeedback} />
+          <MetricsCard deals={deals} jobs={reppoJobs} />
+          <LearningLog log={learningLog} />
           <LedgerTable ledger={ledger} />
         </div>
       </div>
