@@ -94,7 +94,8 @@ The order of checks for every purchase:
 
 1. **Spend Guard first.** It must approve the exact amount, or nothing else runs (`lib/negotiation/run.ts`).
 2. **Rail 1: Kite Passport sandbox.** The server runs `kpass sandbox status`, and refuses to continue unless kpass confirms sandbox mode. It then runs `kpass session execute --method GET --url <mock seller checkout> --idempotency-key <order id>` as a child process with an explicit argument list (no shell). The mock seller's checkout is a real x402 endpoint built with `@x402/next`: it answers HTTP 402 with exact-scheme pieUSD requirements on `eip155:2368` and settles through the Pieverse facilitator. It only charges orders signed by Melit after Guard approval. The approved Passport session (3 pieUSD over 7 days) is a **second** limit layer.
-3. **Rail 2: direct testnet transfer.** If Rail 1 fails (not logged in, not sandbox, `host_not_in_executable_catalog`, unreachable seller, and so on), Melit sends an ERC-20 pieUSD transfer from `AGENT_PRIVATE_KEY` with viem. It confirms the RPC reports chain 2368 before sending and waits for the receipt.
+3. **Rail 2: direct testnet transfer.** If Rail 1 fails (not logged in, not sandbox, `host_not_in_executable_catalog`, unreachable seller, and so on), Melit sends an ERC-20 transfer from `AGENT_PRIVATE_KEY` with viem. It pays with pieUSD if the wallet holds enough, otherwise with the test USDT that https://faucet.gokite.ai hands out (`0x0fF5…7e63`); pieUSD itself can only be minted by its owner. Before sending, it confirms the RPC reports chain 2368 and that the wallet has KITE for gas, then waits for the receipt.
+4. **Optional labelled fallback.** With `MELIT_SIMULATED_FALLBACK=1`, if every real rail fails (for example, the public demo wallet ran dry), Melit issues a receipt labelled **Simulated payment** that says no money moved and lists why each real rail failed.
 
 Two deliberate exceptions to "fall back for any reason":
 
@@ -105,9 +106,11 @@ If every rail fails, the purchase fails, the feed shows each rail's error, and n
 
 Each ledger entry stores the rail that paid, the tx hash and a KiteScan link, and all of these are covered by the server's HMAC signature.
 
+**Kite Passport status (Nov 15, 2026):** with a fresh Passport account in sandbox mode, `kpass agent register` aborts with `sandbox mode mismatch: server reported X-Kite-Mode="live" for a sandbox request`, and `kpass faucet drop` answers "disabled on production". kpass refuses to act rather than touch live data, so Rail 1 currently fails and Melit falls back to Rail 2. The Rail 1 error is shown in each receipt's attempt trail. Once Kite's backend serves sandbox mode, `npm run kite:setup` completes and Rail 1 pays first with no code change.
+
 **Why a public seller URL:** with `kpass session execute`, the Passport *backend* calls the seller URL and settles the payment, so the mock seller checkout must be reachable from the internet (`SELLER_BASE_URL`, for example your Vercel deploy). A `localhost` seller can't be paid through Rail 1, so those payments use Rail 2.
 
-**Demo video vs deployed site:** kpass needs a local terminal and a passkey, so record real payments from a local server. The deployed Vercel site can't run kpass. With `MELIT_PAYMENT_MODE=recorded` it replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
+**Demo video vs deployed site:** kpass needs a local terminal and a passkey, so record Passport payments from a local server. The deployed Vercel site can't run kpass, but it can run Rail 2. The live demo at https://melit.vercel.app uses a throwaway testnet wallet at `MELIT_TESTNET_SCALE=0.001`, so a $300 week costs 0.3 test tokens, and `MELIT_SIMULATED_FALLBACK=1` for when the wallet runs dry. With `MELIT_PAYMENT_MODE=recorded` it replays real receipts from `data/recorded-receipts.json` (written locally with `MELIT_RECORD_RECEIPTS=1`), labelled **Recorded receipt (replay)** with "No new payment was made".
 
 ## What's simulated vs real
 
@@ -143,14 +146,14 @@ Without a key the app still runs, but every round is labelled **Fallback heurist
 
 ### Testnet payments (local)
 
-1. **Rail 2 (quickest).** Create a throwaway wallet that you'll only use on testnet. Get KITE for gas from https://faucet.gokite.ai and some pieUSD, then set `AGENT_PRIVATE_KEY` and `MOCK_SELLER_PAYTO` in `.env.local`.
+1. **Rail 2 (quickest).** Create a throwaway wallet that you'll only use on testnet. Claim KITE (gas) and test USDT for it at https://faucet.gokite.ai, then set `AGENT_PRIVATE_KEY` and `MOCK_SELLER_PAYTO` in `.env.local`. Check funding with `npm run testnet:balance -- <address>`.
 2. **Rail 1 (Kite Passport sandbox).** Install the CLI (`curl -fsSL https://cli.gokite.ai/install.sh | bash`) and run `kpass login`. Then run `npm run kite:setup`, which switches on sandbox mode, requests faucet pieUSD, registers the agent and creates the 7-day "Melit weekly budget" session. Approve the printed URL with your passkey. Then set `MELIT_KPASS=1`, `KPASS_SESSION_ID` and `SELLER_BASE_URL` (a public deploy of this app).
 3. Optionally set `MELIT_RECORD_RECEIPTS=1` to save real receipts to `data/recorded-receipts.json` for the deployed replay.
 
 ### Deploy to Vercel
 
 1. Import the repo in Vercel (framework preset: Next.js).
-2. Set `OPENSERV_API_KEY`. On Vercel the payment mode defaults to `recorded`: it replays committed receipts, or falls back to simulated receipts if there are none. Set `MOCK_SELLER_PAYTO` too if Rail 1 should be able to pay this deploy's seller checkout.
+2. Set `OPENSERV_API_KEY`. For live testnet payments also set `AGENT_PRIVATE_KEY` (throwaway testnet key, as a *sensitive* variable), `MOCK_SELLER_PAYTO`, `MELIT_PAYMENT_MODE=testnet`, `MELIT_TESTNET_SCALE=0.001`, `MELIT_SIMULATED_FALLBACK=1` and `SELLER_BASE_URL`. Without a key, Vercel defaults to `recorded` mode: it replays committed receipts, or issues labelled simulated receipts if there are none.
 3. Deploy. The negotiation route streams its response and allows up to 120 s per request.
 
 Never put a mainnet key or a funded personal wallet in any env var. `AGENT_PRIVATE_KEY` is for a throwaway testnet wallet only.
