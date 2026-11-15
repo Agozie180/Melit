@@ -214,9 +214,11 @@ export function applyGuardrails(
   let { action, offerPriceCents } = d;
 
   const onList =
-    ctx.shoppingList === undefined
+    ctx.listMaxPriceCents !== undefined
       ? true
-      : ctx.shoppingList.some((row) => normalizeItemName(row.name) === normalizeItemName(ctx.item.name));
+      : ctx.shoppingList === undefined
+        ? true
+        : ctx.shoppingList.some((row) => normalizeItemName(row.name) === normalizeItemName(ctx.item.name));
   if (!onList && action !== "walk") {
     guardrails.push("This item is not on your shopping list: walking away.");
     return { ...d, action: "walk", offerPriceCents: 0, guardrails };

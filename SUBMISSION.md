@@ -6,11 +6,15 @@
 
 **Also:** [JUDGING.md](./JUDGING.md) (the brief, quoted), [ARCHITECTURE.md](./ARCHITECTURE.md) (the blueprint), [AUDIT.md](./AUDIT.md) (findings), [demo.md](./demo.md) (the 90-second script).
 
-**Demo:** deploy this branch before judging. On 15 Nov 2026, https://melit.vercel.app was an older build. Its page had no shopping list. The preview for this branch was behind Vercel SSO, so this audit did not click through it.
+**Live demo:** https://melit.vercel.app (`main` as of 15 Nov 2026). The shopping list, signed allowlist, and Spend Guard are on that deploy. Negotiation rounds call SERV Reasoning (`melit-negotiator-v3`) with strict JSON schema and `max_completion_tokens: 2048`; live smoke tests on that URL showed **`source: "serv"`** on both rounds (model `gpt-5.4-mini-2026-03-17`). If a round shows **Fallback heuristic**, the trail states why (timeout, quota, invalid JSON, etc.).
+
+**Video:** [demo.md](./demo.md) is the 90-second judge script (empty list refusal first). `demo.mp4` in the repo is a longer (~2 min) cut — use one or the other in the form and say which.
+
+**Repo visibility:** the hackathon asks for a **public** repository. Make the repo public in GitHub settings before you submit.
 
 ## Write-up
 
-Melit haggles, then buys only what you allowed. Each move calls SERV Reasoning (`melit-negotiator-v3`) and shows the trail. If that call fails or the JSON is invalid, the round is labelled **Fallback heuristic**. The model cannot raise the limits.
+Melit haggles, then buys only what you allowed. Each move calls SERV Reasoning first and shows the trail. If that call fails or the JSON is invalid, the round is labelled **Fallback heuristic**. The model cannot raise the limits.
 
 Two checks run in server code before any payment. The shopping list is what it can buy: name, max price, and quantity, stored in the browser and HMAC-signed on save. The Spend Guard is how much: it recomputes the signed ledger over 7 days and blocks anything over $300. Renaming a purchase, raising a max, or breaking a signature freezes spending. Off-list bundles log `declined: not on your list` until you approve them.
 
