@@ -18,7 +18,7 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 **What was wrong.** Earlier copy said every negotiation move is a SERV call, that the public site is Passport-verified, and that the 15% vault line is money Melit earns.
 
-**Fix.** [README.md](./README.md), [SUBMISSION.md](./SUBMISSION.md), and [JUDGING.md](./JUDGING.md) now say: the badge is **SERV Reasoning** or **Fallback heuristic**; the public card is a testnet wallet unless `kpass` confirms Passport; the 15% line is `splitSavings` of list price minus paid price.
+**Fix.** [README.md](./README.md), [SUBMISSION.md](./SUBMISSION.md), and [JUDGING.md](./JUDGING.md) now say: the badge is **SERV Reasoning** or **Fallback heuristic**; the agent card is Passport-verified only when live `kpass agent status` succeeds (the public deploy may still show a testnet wallet while `passport.runtimeReady` is true); the 15% line is `splitSavings` of list price minus paid price.
 
 **Test.** There is no unit test for prose. The check is to read those three files against `decide` in `lib/negotiation/negotiator.ts` and `splitSavings` in `lib/money.ts`.
 
@@ -34,11 +34,11 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 ### B0. Passport on Vercel (Rail 1)
 
-**Path added 15 Nov 2026 evening.** `scripts/download-kpass.mjs` installs `vendor/kpass-linux-amd64` at build. `KPASS_RUNTIME_BUNDLE_B64` (from `npm run kite:export-runtime`) materializes `~/.kite-passport` into `/tmp` via `lib/kite/kpass-runtime.ts`. `MELIT_KPASS=1` or the bundle env enables Rail 1. **Owner checklist for a live Passport deploy:** (1) `KPASS_RUNTIME_BUNDLE_B64` secret after local `kpass login`, (2) `KPASS_SESSION_ID` and `KPASS_BASE_URL`, (3) `SELLER_BASE_URL` = public Melit URL, (4) same `MELIT_ORDER_SECRET` locally and on Vercel, (5) Kite merchant allowlist for that URL (otherwise `sandbox_merchant_not_allowlisted`). Passport **session TTL** for judges is **30 days** via `scripts/kite-setup.mjs` (`--ttl 30d`). **Still blocked on the public demo** until those are set. **Test:** `tests/kpass-runtime.test.ts`, `npm run download:kpass`, `npm run smoke:browser` (prod build).
+**Path added 15 Nov 2026 evening.** `scripts/download-kpass.mjs` installs `vendor/kpass-linux-amd64` at build. `KPASS_RUNTIME_BUNDLE_B64` (from `npm run kite:export-runtime`) materializes `~/.kite-passport` into `/tmp` via `lib/kite/kpass-runtime.ts`. `MELIT_KPASS=1` or the bundle env enables Rail 1. **Production (15 Nov 2026 night):** Vercel has the bundle, session (`agent_session_01a1e10c-338d-7698-b16c-a2218d24880b`, 30-day TTL), and `SELLER_BASE_URL`; `GET https://melit.vercel.app/api/agent` returns `passport.runtimeReady: true`. **Still blocks Rail 1 settlement:** Kite merchant allowlist (`sandbox_merchant_not_allowlisted`) until `https://melit.vercel.app` is listed. The dashboard card may still say testnet wallet if serverless `kpass agent status` does not confirm in that request. **Test:** `tests/kpass-runtime.test.ts`, `npm run download:kpass`, `npm run smoke:browser` (prod build).
 
 ### B1. The public URL matches `main` (shopping list + SERV)
 
-Production https://melit.vercel.app on 15 Nov 2026 (deploy for `main` after the SERV fix) serves the shopping list UI, `reasoning.configured: true`, Reppo configured, testnet payments, identity **not** Passport-verified. **Preview** deploys may require Vercel Authentication unless a share link is used.
+Production https://melit.vercel.app on 15 Nov 2026 (`d5fc3eb`, deploy `dpl_DDf3wQgBvDGqPc6B7iozisRAMuPk`) serves the shopping list UI, `reasoning.configured: true`, Reppo configured, testnet payments, Passport runtime ready with Rail 1 in the configured rail list. `identity.verified` may still be false on the agent card. **Preview** deploys may require Vercel Authentication unless a share link is used.
 
 ### B2. Rate limits do not survive a second serverless instance
 
@@ -66,7 +66,7 @@ Production https://melit.vercel.app on 15 Nov 2026 (deploy for `main` after the 
 
 ### B7. CI and build
 
-`.github/workflows/test.yml` runs `npm ci`, `npm run test:coverage`, and `npm run build` (Next.js typecheck) on `main` and pull requests. Locally, on 15 Nov 2026 after the judge-audit pass, `npm test` reported 96 passing tests.
+`.github/workflows/test.yml` runs `npm ci`, `npm run test:coverage`, and `npm run build` (Next.js typecheck) on `main` and pull requests. Locally, on 15 Nov 2026 after the judge-audit pass, `npm test` reported 98 passing tests.
 
 ### B8. Reppo / client races (fixed 15 Nov 2026)
 

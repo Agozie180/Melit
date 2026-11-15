@@ -34,7 +34,7 @@ The page shows:
 >
 > special_mention, TBA
 
-Per-track dollar amounts were still TBA on 15 Nov 2026. The README names the $5,000 total and does not name a Kite or Reppo purse.
+Per-track dollar amounts were still TBA on 15 Nov 2026. The README names **SERV Hackathon Edition 02**, the **Kite** and **Reppo** tracks, and links here for prize wording copied from the event page.
 
 ## Tracks, copied verbatim
 
