@@ -12,7 +12,7 @@
 
 Melit is a shopping agent that **negotiates first** and **pays only if server code allows it**. Each negotiation round calls **SERV Reasoning** (`melit-negotiator-v3`, strict JSON schema). The UI labels **SERV Reasoning** or **Fallback heuristic** so judges see when the model did not answer. Feedback after purchase can call SERV (`melit-learner-v1`).
 
-Two **independent** checks run before any payment rail: (1) a **signed shopping list**—what it may buy, max price, quantity; (2) a **$300 rolling 7-day Spend Guard** on the signed ledger. Tampering with names, prices, or signatures fails closed. Off-list seller pushes are declined until the owner approves and saves.
+Two **independent** checks run before any payment rail: (1) a **signed shopping list**—what it may buy, max price, quantity; (2) a **$300 rolling 7-day Spend Guard** on the signed ledger held **server-side** per session (KV/Upstash on Vercel). Tampering with names, prices, or signatures fails closed. Off-list seller pushes are declined until the owner approves and saves.
 
 **Simulated / honest limits:** sellers are mocks in `lib/market/catalog.ts`; savings vault 85/15 is **list price minus paid price**, not money collected. Payments are **KiteAI testnet pieUSD** when the wallet can pay, otherwise **Simulated**. Production runs **Rail 1** (`kite-passport-sandbox`) when Vercel secrets are set; the agent card shows Passport only when live `kpass` confirms it, and may still read **testnet wallet** otherwise. Reppo runs only with `REPPO_API_KEY`; verdicts are async and may not appear in a short demo.
 

@@ -52,8 +52,8 @@ export function ReppoTrackCard({
         Reppo evaluations
       </CardTitle>
       <p className="mb-3 text-xs text-neutral-600">
-        Every purchase is judged asynchronously by Reppo&apos;s evaluator panel. Purchases never wait on this queue. Keep this tab open until jobs reach verdict and
-        learned — the queue runs in the browser, not on the server.
+        Every purchase is judged asynchronously by Reppo&apos;s evaluator panel. Purchases never wait on this queue. Status labels follow Reppo&apos;s API
+        (QUEUED → PROCESSING → COMPLETED/FAILED). Completed jobs link to the evaluation on eval.reppo.xyz for verification.
       </p>
       <div className="mb-3 flex flex-wrap gap-2">
         {(["queued", "pending", "verdict", "failed"] as const).map((s) => (
@@ -90,7 +90,16 @@ export function ReppoTrackCard({
                 )}
                 {job.learned && <Badge tone="green">learned</Badge>}
                 {job.error && job.state !== "verdict" && <span className="w-full text-xs text-red-700">{job.error}</span>}
-                {job.evalId && <span className="w-full font-mono text-[10px] text-neutral-400">eval {job.evalId}</span>}
+                {job.evalId && (
+                  <a
+                    className="w-full font-mono text-[10px] text-violet-700 hover:underline"
+                    href={`https://eval.reppo.xyz/evaluations/${encodeURIComponent(job.evalId)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Verify on Reppo · {job.evalId}
+                  </a>
+                )}
               </li>
             );
           })}

@@ -20,6 +20,7 @@
     "playwright:install": "playwright install chromium"
   },
   "dependencies": {
+    "@upstash/redis": "^1.41.0",
     "@x402/core": "^2.31.0",
     "@x402/evm": "^2.31.0",
     "@x402/next": "^2.31.0",

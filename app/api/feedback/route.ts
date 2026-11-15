@@ -28,7 +28,7 @@ const BodySchema = z.discriminatedUnion("kind", [
 ]);
 
 export async function POST(req: Request) {
-  const { limited, remaining } = checkRateLimit(req, "feedback");
+  const { limited, remaining } = await checkRateLimit(req, "feedback");
   if (limited) return limited;
   const body = BodySchema.safeParse(await req.json().catch(() => null));
   if (!body.success) return Response.json({ error: "Invalid feedback request." }, { status: 400 });

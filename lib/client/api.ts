@@ -50,26 +50,45 @@ export const ledgerStore = {
   getServerSnapshot(): LedgerEntry[] {
     return EMPTY;
   },
-  append(entry: LedgerEntry) {
-    const raw = localStorage.getItem(LEDGER_KEY);
-    let existing: LedgerEntry[] = EMPTY;
-    try {
-      const value = raw ? JSON.parse(raw) : [];
-      existing = Array.isArray(value) ? value : EMPTY;
-    } catch {
-      existing = EMPTY;
-    }
-    const next = [...existing, entry];
-    const encoded = JSON.stringify(next);
+  replace(entries: LedgerEntry[]) {
+    const encoded = JSON.stringify(entries);
     localStorage.setItem(LEDGER_KEY, encoded);
-    cache = { raw: encoded, parsed: next };
+    cache = { raw: encoded, parsed: entries };
     listeners.forEach((l) => l());
+  },
+  append(entry: LedgerEntry) {
+    ledgerStore.replace([...ledgerStore.getSnapshot(), entry]);
   },
   clear() {
     localStorage.removeItem(LEDGER_KEY);
+    cache = { raw: null, parsed: EMPTY };
     listeners.forEach((l) => l());
   },
 };
+
+export type FinancialState = {
+  ledger: LedgerEntry[];
+  list: import("../shopping/list").SignedShoppingList | null;
+  persistent: boolean;
+};
+
+/** Loads the server-held ledger and signed list (authoritative for Spend Guard). */
+export async function syncFinancialState(): Promise<FinancialState> {
+  const res = await fetch("/api/state", { cache: "no-store", credentials: "include" });
+  if (!res.ok) throw new Error(`Couldn't load financial state (HTTP ${res.status})`);
+  const data = (await res.json()) as FinancialState;
+  ledgerStore.replace(Array.isArray(data.ledger) ? data.ledger : []);
+  if (data.list) {
+    const { listStore } = await import("./shopping-list");
+    listStore.replace(data.list);
+  }
+  return data;
+}
+
+export async function resetDemoLedger(): Promise<void> {
+  await fetch("/api/state", { method: "DELETE", credentials: "include" });
+  ledgerStore.clear();
+}
 
 const CLOCK_TICK_MS = 30_000;
 

@@ -1,5 +1,5 @@
-// SERVER-ONLY. The shopping list lives in the browser, like the ledger, and is sent with
-// every request. The owner saves it through POST /api/shopping-list, which HMAC-signs the
+// SERVER-ONLY. The signed shopping list is stored per session (demo-state) after POST /api/shopping-list.
+// The owner saves it through POST /api/shopping-list, which HMAC-signs the
 // rows. A client that edits a max price, a quantity, or the set of names breaks the
 // signature. Extra fields (`remaining`, `allowed`, `onList`) are stripped and ignored.
 // Quantity left is counted from the verified ledger, never from a number the client sends.
