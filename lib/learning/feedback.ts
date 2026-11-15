@@ -137,8 +137,8 @@ export async function proposeOwnerUpdate(
 export function reppoFallback(verdict: ReppoVerdict): Omit<ProposedUpdate, "method" | "fallbackReason"> {
   const score = verdict.score === null ? "?" : Math.round(verdict.score);
   return {
-    update: { ...NO_CHANGE, addNote: `Reppo judged a negotiation ${score}/100 (${verdict.route ?? "no route"})` },
-    learned: `Reppo scored that negotiation ${score}/100 (${verdict.route ?? "no route"}). I couldn't interpret the details right now, so I only noted the score.`,
+    update: NO_CHANGE,
+    learned: `Reppo scored that negotiation ${score}/100 (${verdict.route ?? "no route"}). I couldn't interpret the details right now, so my strategy stays as it is.`,
   };
 }
 
