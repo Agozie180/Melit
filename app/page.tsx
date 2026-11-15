@@ -142,7 +142,7 @@ export default function Dashboard() {
             A shopping agent with a budget, a negotiator&apos;s brain and a savings vault. It haggles before it buys. The shopping list decides what it can buy, and the server blocks any payment that would take your signed 7-day ledger over $300.
           </p>
           <p className="mt-2 text-xs text-neutral-500">
-            Kite + Reppo tracks · Mock sellers · payments: {paymentsLabel} · decisions by SERV Reasoning ·{" "}
+            Kite + Reppo tracks · Mock sellers · payments: {paymentsLabel} · each round calls SERV Reasoning (badge shows SERV or Fallback) ·{" "}
             {info ? (reppoConfigured ? "purchases judged by Reppo" : "Reppo judge not configured") : infoError ? "Reppo status unavailable" : "checking Reppo…"}
           </p>
         </div>
@@ -155,6 +155,12 @@ export default function Dashboard() {
       {info && !info.reasoning.configured && (
         <p className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
           OPENSERV_API_KEY isn&apos;t set on the server, so every round will use the fallback heuristic and be labelled as such.
+        </p>
+      )}
+      {info?.reasoning.configured && (
+        <p className="mt-4 rounded-xl bg-violet-50 px-3 py-2 text-sm text-violet-950 ring-1 ring-violet-200">
+          SERV Reasoning is wired (verified in sandbox this morning). If the free OpenServ quota is exhausted, rounds show the violet{" "}
+          <span className="font-medium">Fallback heuristic</span> badge until credits return. The integration is real; the badge tells you which brain ran.
         </p>
       )}
 

@@ -2,7 +2,7 @@
 //
 // SERV Reasoning (docs.openserv.ai/serv-reasoning) is wire-compatible with the OpenAI Chat
 // Completions API: POST https://inference-api.openserv.ai/v1/chat/completions with a bearer
-// key, a required system message, and an optional strict `response_format: json_schema`.
+// key, a required system message, and `response_format: json_object` (zod validates after).
 // The adapter only returns raw model JSON; validation and fallbacks live in the negotiator.
 
 export interface ReasoningResult {
@@ -27,6 +27,8 @@ export class ReasoningError extends Error {}
 
 const SERV_BASE_URL = "https://inference-api.openserv.ai/v1";
 const TIMEOUT_MS = 25_000;
+/** Strict json_schema made OpenServ infer ~130k max_tokens and return HTTP 400; cap output and use json_object + zod instead. */
+const MAX_COMPLETION_TOKENS = 2048;
 
 function stripFences(text: string): string {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -38,11 +40,13 @@ export class ServReasoningAdapter implements ReasoningAdapter {
   readonly model: string;
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
+  private readonly fetchImpl: typeof fetch;
 
-  constructor(opts?: { apiKey?: string; model?: string; baseUrl?: string }) {
+  constructor(opts?: { apiKey?: string; model?: string; baseUrl?: string; fetchImpl?: typeof fetch }) {
     this.apiKey = opts?.apiKey ?? (process.env.OPENSERV_API_KEY || process.env.SERV_API_KEY || undefined);
     this.model = opts?.model ?? (process.env.SERV_MODEL || "gpt-5.4-mini");
     this.baseUrl = opts?.baseUrl ?? (process.env.SERV_BASE_URL || SERV_BASE_URL);
+    this.fetchImpl = opts?.fetchImpl ?? fetch;
   }
 
   get configured(): boolean {
@@ -61,7 +65,7 @@ export class ServReasoningAdapter implements ReasoningAdapter {
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/chat/completions`, {
+      res = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
         method: "POST",
         signal: controller.signal,
         headers: {
@@ -70,15 +74,16 @@ export class ServReasoningAdapter implements ReasoningAdapter {
         },
         body: JSON.stringify({
           model: this.model,
+          max_tokens: MAX_COMPLETION_TOKENS,
           reasoning_effort: "low",
           messages: [
-            { role: "system", content: args.system },
+            {
+              role: "system",
+              content: `${args.system}\n\nOutput a single JSON object only (no markdown). It must satisfy the ${args.schemaName} shape.`,
+            },
             { role: "user", content: args.user },
           ],
-          response_format: {
-            type: "json_schema",
-            json_schema: { name: args.schemaName, strict: true, schema: args.schema },
-          },
+          response_format: { type: "json_object" },
         }),
       });
     } catch (err) {

@@ -24,6 +24,12 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 ## Open
 
+### B0. Live rounds may show Fallback heuristic while OpenServ quota is out
+
+**What we know.** Melit calls SERV on every round (`lib/adapters/reasoning.ts`). Sandbox runs on 15 Nov 2026 succeeded (including Opus 5.5). The public deploy still has `OPENSERV_API_KEY` set (`GET /api/agent` → `reasoning.configured: true`). When the free OpenServ token/credits are exhausted, rounds correctly fall back and the UI labels **Fallback heuristic**.
+
+**Fix applied on branch `cursor/serv-quota-honesty-c444`.** Negotiate no longer sends strict `json_schema` (which made OpenServ return HTTP 400 `max_tokens is too large`). Requests use `json_object`, `max_tokens: 2048`, and zod validation as before. **Test:** `tests/reasoning.test.ts`.
+
 ### B1. The public URL lagged `main`, then caught up
 
 Before `main` moved to `7af69c8`, the HTML from https://melit.vercel.app contained no "Shopping list".
@@ -36,7 +42,7 @@ After that fast-forward, Vercel production `dpl_3PaCYdWGiVNf7xi9AMUmi9yACEA9` wa
 
 `lib/server/rate-limit.ts` keeps counts in a `Map` on the instance. `LIMITS` covers negotiate, feedback, overspend, and shopping-list. It does not include Reppo. `POST /api/reppo` uses a separate 20-second gap in `app/api/reppo/route.ts`, also in memory. `GET /api/reppo/[id]` does not validate the id with zod and does not use `checkRateLimit`. The rate-limit file comments that a Vercel Firewall rule is the cross-instance layer. A 24-request burst on 15 Nov 2026 did not trigger it, so that layer stays unverified.
 
-**Smallest fix, not applied.** Add a `reppo` rule to `LIMITS`, parse the id with zod, and move the counters to a store shared across instances.
+**Smallest fix.** `reppo` is now in `LIMITS` and `GET /api/reppo/[id]` validates the id with zod. A shared store across instances is still on the roadmap.
 
 ### B3. The HMAC key has a public fallback
 

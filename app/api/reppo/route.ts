@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ReppoError, getReppoClient } from "@/lib/adapters/reppo";
 import { buildReppoInput } from "@/lib/learning/reppo-input";
 import { verifyDealSummary } from "@/lib/server/deal-summary";
-import { clientIp } from "@/lib/server/rate-limit";
+import { checkRateLimit, clientIp, withRemaining } from "@/lib/server/rate-limit";
 
 export const maxDuration = 30;
 
@@ -17,6 +17,8 @@ const BodySchema = z.object({ summary: z.unknown() });
 
 /** Submit one finished purchase to Reppo for evaluation. Returns as soon as Reppo has queued it. */
 export async function POST(req: Request) {
+  const { limited, remaining } = checkRateLimit(req, "reppo");
+  if (limited) return limited;
   const body = BodySchema.safeParse(await req.json().catch(() => null));
   if (!body.success) return Response.json({ error: "Invalid request." }, { status: 400 });
   const check = verifyDealSummary(body.data.summary);
@@ -29,7 +31,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "This negotiation is too old to submit.", retryable: false }, { status: 400 });
   }
   const existing = submittedDeals.get(summary.dealId);
-  if (existing) return Response.json({ evalId: existing, status: "QUEUED", duplicate: true });
+  if (existing) return withRemaining(Response.json({ evalId: existing, status: "QUEUED", duplicate: true }), remaining);
 
   const client = getReppoClient();
   if (!client.configured) {
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
   try {
     const evaluation = await client.submit("action", buildReppoInput(summary));
     submittedDeals.set(summary.dealId, evaluation.id);
-    return Response.json({ evalId: evaluation.id, status: evaluation.status }, { status: 201 });
+    return withRemaining(Response.json({ evalId: evaluation.id, status: evaluation.status }, { status: 201 }), remaining);
   } catch (err) {
     const e = err as ReppoError;
     return Response.json({ error: e.message, retryable: e.retryable ?? true }, { status: e.status === 0 ? 503 : 502 });
