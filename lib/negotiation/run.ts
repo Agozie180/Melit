@@ -13,6 +13,11 @@ import { recordReceipt } from "../payments/offline-rails";
 import { PaymentFailedError, type PaymentOrder, type PaymentReceipt } from "../payments/types";
 import type { ReasoningAdapter } from "../adapters/reasoning";
 import { decide, type HistoryTurn } from "./negotiator";
+import { DEFAULT_PROFILE, parseProfile, type StrategyProfile } from "../learning/profile";
+import { reputationFor } from "../learning/reputation";
+import type { DealOutcome, DealSummary, SummaryRound } from "../learning/types";
+import { reviewDeal, verifiedReviews } from "../market/reviews";
+import { signDealSummary } from "../server/deal-summary";
 
 export interface PurchaseDeps {
   /** Pays an approved order. Only ever called after the Spend Guard has said yes. */
@@ -24,11 +29,19 @@ const defaultDeps = (): PurchaseDeps => {
   return { pay: (order) => router.pay(order) };
 };
 
+/** What the client sends back so Melit can learn: its strategy and the sellers' signed reviews. */
+export interface LearningInput {
+  profile?: StrategyProfile;
+  /** Raw reviews from the client; only server-signed ones are used. */
+  reviews?: unknown;
+}
+
 export async function* runShopping(
   request: ShoppingRequest,
   rawLedger: unknown,
   reasoner: ReasoningAdapter,
   deps: PurchaseDeps = defaultDeps(),
+  learning: LearningInput = {},
 ): AsyncGenerator<FeedEvent> {
   const catalogItem = findItem(request.query);
   if (!catalogItem) {
@@ -43,11 +56,16 @@ export async function* runShopping(
     return;
   }
   const remaining = checkSpend({ ledger: ledgerCheck.entries, attemptedCents: 1, now: Date.now() }).remainingCents;
+  const profile = parseProfile(learning.profile ?? DEFAULT_PROFILE);
+  const reputation = reputationFor(verifiedReviews(learning.reviews), catalogItem.sellerId);
+  const mood = { willingness: reputation.willingness, floorPremium: reputation.floorPremium };
   yield { type: "start", item, request, remainingCents: remaining };
 
   let ask = catalogItem.listPriceCents;
   const history: HistoryTurn[] = [];
+  const rounds: SummaryRound[] = [];
   let dealPrice: number | undefined;
+  let outcome: DealOutcome | undefined;
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     const decision = await decide(
@@ -60,15 +78,30 @@ export async function* runShopping(
         remainingBudgetCents: remaining,
         userMaxPriceCents: request.maxPriceCents,
         priority: request.priority,
+        profile,
+        reputation,
       },
       reasoner,
     );
     const askBefore = ask;
+    const summaryRound: SummaryRound = {
+      round,
+      askCents: askBefore,
+      action: decision.action,
+      offerCents: decision.offerPriceCents,
+      source: decision.source,
+      reasoning: decision.reasoning.slice(0, 5).map((r) => r.slice(0, 300)),
+      sellerStatus: null,
+      sellerPriceCents: null,
+      sellerMessage: null,
+    };
+    rounds.push(summaryRound);
 
     if (decision.action === "walk") {
       yield { type: "round", round: { round, askBeforeCents: askBefore, decision } };
       yield { type: "no-deal", message: "Melit walked away: the deal wasn't good enough within your limits." };
-      return;
+      outcome = "melit-walked";
+      break;
     }
 
     if (decision.action === "accept") {
@@ -78,8 +111,11 @@ export async function* runShopping(
       break;
     }
 
-    const reply = sellerRespond(catalogItem, decision.offerPriceCents, ask, round);
+    const reply = sellerRespond(catalogItem, decision.offerPriceCents, ask, round, mood);
     yield { type: "round", round: { round, askBeforeCents: askBefore, decision, seller: reply } };
+    summaryRound.sellerStatus = reply.status;
+    summaryRound.sellerPriceCents = reply.status === "walk" ? null : reply.priceCents;
+    summaryRound.sellerMessage = reply.message;
     history.push({
       round,
       melitAction: "offer",
@@ -96,21 +132,68 @@ export async function* runShopping(
     }
     if (reply.status === "walk") {
       yield { type: "no-deal", message: "The seller walked away after the final round. Nothing was bought." };
-      return;
+      outcome = "seller-walked";
+      break;
     }
     ask = reply.priceCents;
   }
 
-  if (dealPrice === undefined) {
-    yield { type: "no-deal", message: "No deal within the round limit. Nothing was bought." };
-    return;
-  }
-  if (dealPrice > request.maxPriceCents) {
-    yield { type: "no-deal", message: `Deal price ${formatUsd(dealPrice)} is above your max of ${formatUsd(request.maxPriceCents)}. Not buying.` };
-    return;
+  let paidCents: number | null = null;
+  if (!outcome) {
+    if (dealPrice === undefined) {
+      yield { type: "no-deal", message: "No deal within the round limit. Nothing was bought." };
+      outcome = "no-deal";
+    } else if (dealPrice > request.maxPriceCents) {
+      yield { type: "no-deal", message: `Deal price ${formatUsd(dealPrice)} is above your max of ${formatUsd(request.maxPriceCents)}. Not buying.` };
+      outcome = "no-deal";
+    } else {
+      for await (const event of purchase(catalogItem, item, dealPrice, rawLedger, deps)) {
+        if (event.type === "purchased") {
+          outcome = "purchased";
+          paidCents = event.entry.paidCents;
+        } else if (event.type === "blocked") outcome = "blocked";
+        else if (event.type === "payment-failed") outcome = "payment-failed";
+        yield event;
+      }
+      outcome ??= "payment-failed";
+    }
   }
 
-  yield* purchase(catalogItem, item, dealPrice, rawLedger, deps);
+  const review = reviewDeal({
+    item: catalogItem,
+    offersCents: rounds.filter((r) => r.action === "offer").map((r) => r.offerCents),
+    outcome,
+    paidCents,
+  });
+  yield { type: "seller-review", review, reputation };
+
+  const summary: Omit<DealSummary, "sig"> = {
+    dealId: `deal_${randomUUID()}`,
+    at: Date.now(),
+    itemId: item.id,
+    itemName: item.name,
+    sellerId: item.sellerId,
+    sellerName: item.sellerName,
+    sellerStyle: item.personality,
+    listPriceCents: item.listPriceCents,
+    marketReferenceCents: item.marketReferenceCents,
+    maxPriceCents: request.maxPriceCents,
+    requestPriority: request.priority,
+    remainingBudgetCents: remaining,
+    rounds,
+    outcome,
+    paidCents,
+    savedCents: paidCents === null ? null : item.listPriceCents - paidCents,
+    profile: {
+      aggressiveness: profile.aggressiveness,
+      walkAwayThreshold: profile.walkAwayThreshold,
+      priority: profile.priority,
+      notes: profile.notes,
+      version: profile.version,
+    },
+    reputation,
+  };
+  yield { type: "summary", summary: signDealSummary(summary) };
 }
 
 /**

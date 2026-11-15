@@ -2,6 +2,7 @@
 
 import type { PaymentRailId, PaymentReceipt, RailAttempt } from "./payments/types";
 export type { PaymentRailId, PaymentReceipt, RailAttempt };
+import type { DealSummary, SellerReputation, SellerReview } from "./learning/types";
 
 export type Priority = "save" | "fast";
 
@@ -85,5 +86,7 @@ export type FeedEvent =
   | { type: "blocked"; guard: GuardResult; item: PublicItem; priceCents: number }
   | { type: "purchased"; entry: LedgerEntry; receipt: PaymentReceipt; guard: GuardResult }
   | { type: "payment-failed"; message: string; attempts: RailAttempt[]; item: PublicItem; priceCents: number }
+  | { type: "seller-review"; review: SellerReview; reputation: SellerReputation }
+  | { type: "summary"; summary: DealSummary }
   | { type: "error"; message: string }
   | { type: "done" };

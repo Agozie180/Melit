@@ -2,6 +2,7 @@ import { z } from "zod";
 import { runShopping } from "@/lib/negotiation/run";
 import { getReasoningAdapter } from "@/lib/adapters/reasoning";
 import { ndjsonResponse } from "@/lib/server/stream";
+import { parseProfile } from "@/lib/learning/profile";
 
 export const maxDuration = 120;
 
@@ -12,6 +13,8 @@ const BodySchema = z.object({
     priority: z.enum(["save", "fast"]),
   }),
   ledger: z.unknown(),
+  profile: z.unknown().optional(),
+  reviews: z.unknown().optional(),
 });
 
 export async function POST(req: Request) {
@@ -19,5 +22,8 @@ export async function POST(req: Request) {
   if (!body.success) {
     return Response.json({ error: "Invalid request: give an item, a max price and a priority." }, { status: 400 });
   }
-  return ndjsonResponse(runShopping(body.data.request, body.data.ledger, getReasoningAdapter()));
+  const { request, ledger, profile, reviews } = body.data;
+  return ndjsonResponse(
+    runShopping(request, ledger, getReasoningAdapter(), undefined, { profile: parseProfile(profile), reviews }),
+  );
 }
