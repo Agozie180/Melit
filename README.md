@@ -2,7 +2,7 @@
 
 **A shopping agent with a budget, a negotiator's brain, and a savings vault.**
 
-Melit is for people who don't know how to haggle or how to save. You give it a weekly budget ($300). It negotiates the price before it buys, buys only when the deal is good and the budget allows it, and moves what it saved into a visible Savings Vault. It can never spend more than $300 in any rolling 7-day window, and that rule lives in server code, not in a prompt.
+Melit is for people who don't know how to haggle or how to save. You give it a weekly budget ($300). It negotiates the price before it buys, buys only when the deal is good and the budget allows it, and moves what it saved into a visible Savings Vault. Before every payment, the server recomputes the rolling 7-day total from a signed ledger and blocks anything over $300. That rule lives in server code, not in a prompt. (The ledger is held in your browser, so clearing it starts a new week; see [Known limitation](#how-the-spend-guard-works).)
 
 Built for **SERV Hackathon Edition 02**:
 
@@ -11,7 +11,7 @@ Built for **SERV Hackathon Edition 02**:
 
 ## The problem
 
-Most people pay the list price. They don't negotiate because it's awkward, and they don't save because the money leaks out a little at a time. Shopping agents could fix both, but handing an AI your card is scary. You need an agent that bargains hard, explains every decision, and physically can't blow your budget.
+Most people pay the list price. They don't negotiate because it's awkward, and they don't save because the money leaks out a little at a time. Shopping agents could fix both, but handing an AI your card is scary. You need an agent that bargains hard, explains every decision, and has a hard budget check in code before every payment.
 
 ## What Melit does
 
@@ -98,7 +98,9 @@ Reasoning, identity and payments each sit behind an interface, so they can be sw
 
 Tests (`npm test`) cover exactly at the cap, one cent over, the window rolling forward, future-dated entries, invalid amounts, a client-supplied fake total, an edited amount, a back-dated entry, a forged signature and a malformed ledger.
 
-**Known limitation (honest):** without server-side storage, a user can delete their own localStorage ledger and start a fresh week. That only "attacks" their own budget, and the Reset demo button does exactly this on purpose. A production version would persist the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
+**Known limitation:** without server-side storage, a user can delete their own localStorage ledger and start a fresh week. The Reset demo button does exactly this on purpose. On the public demo, every visitor's purchases are paid from one shared testnet agent wallet, so the $300 cap applies per browser ledger, not per wallet. A production version would persist the ledger server-side, or enforce the limit at the wallet level with a Kite Passport spending session.
+
+**Abuse limits on the public demo.** `/api/negotiate` (up to 4 SERV calls and one testnet payment), `/api/feedback` (one SERV call), `/api/overspend` and `/api/reppo` are rate-limited per client IP and globally (`lib/server/rate-limit.ts`, e.g. 6 negotiations per minute and 40 per hour per IP). These counters live in each serverless instance. On the deployment, a Vercel Firewall rate-limit rule (12 POSTs per minute per IP to those four routes, enforced at the edge across all instances) sits in front of them. The testnet wallet only holds faucet pieUSD, and each payment is capped by the x402 client's spend control.
 
 ## Payments on KiteAI testnet
 
