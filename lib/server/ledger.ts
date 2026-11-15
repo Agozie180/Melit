@@ -12,7 +12,7 @@ import type { GuardResult, LedgerEntry } from "../types";
 import { checkSpend } from "../guard/spend-guard";
 import { WEEKLY_CAP_CENTS } from "../money";
 
-const LedgerEntrySchema = z.object({
+export const LedgerEntrySchema = z.object({
   id: z.string().min(1).max(100),
   itemId: z.string().min(1).max(100),
   itemName: z.string().max(200),
@@ -22,13 +22,16 @@ const LedgerEntrySchema = z.object({
   savedCents: z.number().int(),
   timestamp: z.number().int().nonnegative(),
   receiptId: z.string().min(1).max(200),
-  paymentMode: z.enum(["simulated", "kite-x402"]),
+  rail: z.enum(["kite-passport-sandbox", "direct-testnet", "recorded", "simulated"]),
+  txHash: z.string().max(200).nullable(),
+  explorerUrl: z.string().max(300).nullable(),
+  testnetAmount: z.string().max(80).nullable(),
   sig: z.string().min(1).max(200),
 });
 
 export const LedgerSchema = z.array(LedgerEntrySchema).max(500);
 
-function ledgerSecret(): string {
+export function ledgerSecret(): string {
   if (process.env.MELIT_LEDGER_SECRET) return process.env.MELIT_LEDGER_SECRET;
   const apiKey = process.env.OPENSERV_API_KEY || process.env.SERV_API_KEY;
   if (apiKey) {
@@ -39,7 +42,20 @@ function ledgerSecret(): string {
 }
 
 function canonical(e: Omit<LedgerEntry, "sig">): string {
-  return [e.id, e.itemId, e.listPriceCents, e.paidCents, e.savedCents, e.timestamp, e.receiptId, e.paymentMode].join("|");
+  return [
+    "v2",
+    e.id,
+    e.itemId,
+    e.listPriceCents,
+    e.paidCents,
+    e.savedCents,
+    e.timestamp,
+    e.receiptId,
+    e.rail,
+    e.txHash ?? "",
+    e.explorerUrl ?? "",
+    e.testnetAmount ?? "",
+  ].join("|");
 }
 
 export function signEntry(entry: Omit<LedgerEntry, "sig">, secret = ledgerSecret()): LedgerEntry {

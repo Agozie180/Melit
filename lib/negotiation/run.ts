@@ -1,20 +1,34 @@
 // SERVER-ONLY. Orchestrates one shopping request end to end and yields feed events:
-// negotiate (SERV-driven) -> deal check -> Spend Guard -> payment -> signed ledger entry.
+// negotiate (SERV-driven) -> deal check -> Spend Guard -> payment rail -> signed ledger entry.
 
+import { randomUUID } from "node:crypto";
 import type { FeedEvent, LedgerEntry, PublicItem, ShoppingRequest } from "../types";
 import { formatUsd } from "../money";
 import { CATALOG, findItem, getCatalogItem, toPublicItem, type CatalogItem } from "../market/catalog";
 import { MAX_ROUNDS, sellerRespond } from "../market/seller";
 import { checkSpend } from "../guard/spend-guard";
 import { authorizeSpend, signEntry, verifyLedger } from "../server/ledger";
-import { getPaymentAdapter } from "../adapters/payments";
+import { getPaymentRouter } from "../payments";
+import { recordReceipt } from "../payments/offline-rails";
+import { PaymentFailedError, type PaymentOrder, type PaymentReceipt } from "../payments/types";
 import type { ReasoningAdapter } from "../adapters/reasoning";
 import { decide, type HistoryTurn } from "./negotiator";
+
+export interface PurchaseDeps {
+  /** Pays an approved order. Only ever called after the Spend Guard has said yes. */
+  pay: (order: PaymentOrder) => Promise<PaymentReceipt>;
+}
+
+const defaultDeps = (): PurchaseDeps => {
+  const router = getPaymentRouter();
+  return { pay: (order) => router.pay(order) };
+};
 
 export async function* runShopping(
   request: ShoppingRequest,
   rawLedger: unknown,
   reasoner: ReasoningAdapter,
+  deps: PurchaseDeps = defaultDeps(),
 ): AsyncGenerator<FeedEvent> {
   const catalogItem = findItem(request.query);
   if (!catalogItem) {
@@ -96,46 +110,77 @@ export async function* runShopping(
     return;
   }
 
-  yield* purchase(catalogItem, item, dealPrice, rawLedger);
+  yield* purchase(catalogItem, item, dealPrice, rawLedger, deps);
 }
 
-/** Spend Guard, then payment, then a signed ledger entry. Every purchase path goes through here. */
+/**
+ * Spend Guard, then a payment rail, then a signed ledger entry. Every purchase path goes
+ * through here, and no rail is touched unless the guard approved the exact amount.
+ */
 export async function* purchase(
   catalogItem: CatalogItem,
   item: PublicItem,
   priceCents: number,
   rawLedger: unknown,
+  deps: PurchaseDeps = defaultDeps(),
 ): AsyncGenerator<FeedEvent> {
-  const now = Date.now();
-  const guard = authorizeSpend(rawLedger, priceCents, now);
+  const guard = authorizeSpend(rawLedger, priceCents, Date.now());
   if (!guard.allowed) {
     yield { type: "blocked", guard, item, priceCents };
     return;
   }
 
-  const receipt = await getPaymentAdapter().pay({
-    amountCents: priceCents,
-    payee: `mock-seller:${catalogItem.sellerId}`,
-    memo: `Melit purchase: ${item.name}`,
-  });
+  const order: PaymentOrder = {
+    orderId: randomUUID(),
+    itemId: item.id,
+    itemName: item.name,
+    sellerId: catalogItem.sellerId,
+    priceCents,
+  };
+
+  let receipt: PaymentReceipt;
+  try {
+    receipt = await deps.pay(order);
+  } catch (err) {
+    const attempts = err instanceof PaymentFailedError ? err.attempts : [];
+    yield {
+      type: "payment-failed",
+      message: `Payment failed, so nothing was bought: ${(err as Error).message}`,
+      attempts,
+      item,
+      priceCents,
+    };
+    return;
+  }
+
+  if (process.env.MELIT_RECORD_RECEIPTS === "1") {
+    try {
+      recordReceipt(receipt, item.name);
+    } catch (e) {
+      console.warn("[melit] could not record receipt", e);
+    }
+  }
 
   const entry: LedgerEntry = signEntry({
-    id: receipt.receiptId.replace(/^sim_/, "led_"),
+    id: `led_${order.orderId}`,
     itemId: item.id,
     itemName: item.name,
     sellerName: item.sellerName,
     listPriceCents: item.listPriceCents,
     paidCents: priceCents,
     savedCents: item.listPriceCents - priceCents,
-    timestamp: now,
+    timestamp: Date.now(),
     receiptId: receipt.receiptId,
-    paymentMode: receipt.mode,
+    rail: receipt.rail,
+    txHash: receipt.txHash,
+    explorerUrl: receipt.explorerUrl,
+    testnetAmount: receipt.testnetAmount,
   });
   yield { type: "purchased", entry, receipt, guard };
 }
 
 /** Demo: Melit tries to buy something that doesn't fit the remaining weekly budget. */
-export async function* runOverspend(rawLedger: unknown): AsyncGenerator<FeedEvent> {
+export async function* runOverspend(rawLedger: unknown, deps: PurchaseDeps = defaultDeps()): AsyncGenerator<FeedEvent> {
   const check = verifyLedger(rawLedger);
   const remaining = check.ok ? checkSpend({ ledger: check.entries, attemptedCents: 1, now: Date.now() }).remainingCents : 0;
   // Cheapest item that no longer fits, so the block is about the rolling total, not a silly price.
@@ -150,5 +195,5 @@ export async function* runOverspend(rawLedger: unknown): AsyncGenerator<FeedEven
     request: { query: item.name, maxPriceCents: target.listPriceCents, priority: "fast" },
     remainingCents: remaining,
   };
-  yield* purchase(target, item, target.listPriceCents, rawLedger);
+  yield* purchase(target, item, target.listPriceCents, rawLedger, deps);
 }

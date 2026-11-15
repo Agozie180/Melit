@@ -1,5 +1,8 @@
 // All money values are integer cents to avoid floating-point drift.
 
+import type { PaymentRailId, PaymentReceipt, RailAttempt } from "./payments/types";
+export type { PaymentRailId, PaymentReceipt, RailAttempt };
+
 export type Priority = "save" | "fast";
 
 export type SellerPersonality = "firm" | "flexible" | "bluffer" | "bundler";
@@ -32,7 +35,12 @@ export interface LedgerEntry {
   savedCents: number;
   timestamp: number;
   receiptId: string;
-  paymentMode: "simulated" | "kite-x402";
+  /** Which rail actually paid. */
+  rail: PaymentRailId;
+  txHash: string | null;
+  explorerUrl: string | null;
+  /** pieUSD that moved on KiteAI testnet, or null when nothing moved. */
+  testnetAmount: string | null;
   /** HMAC issued by the server when the purchase was approved. */
   sig: string;
 }
@@ -60,16 +68,6 @@ export interface NegotiationRound {
   seller?: SellerReply;
 }
 
-export interface PaymentReceipt {
-  receiptId: string;
-  mode: "simulated" | "kite-x402";
-  amountCents: number;
-  payee: string;
-  network: string;
-  txHash: string | null;
-  settledAt: number;
-}
-
 export interface GuardResult {
   allowed: boolean;
   reason: string;
@@ -86,5 +84,6 @@ export type FeedEvent =
   | { type: "no-deal"; message: string }
   | { type: "blocked"; guard: GuardResult; item: PublicItem; priceCents: number }
   | { type: "purchased"; entry: LedgerEntry; receipt: PaymentReceipt; guard: GuardResult }
+  | { type: "payment-failed"; message: string; attempts: RailAttempt[]; item: PublicItem; priceCents: number }
   | { type: "error"; message: string }
   | { type: "done" };
