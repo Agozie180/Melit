@@ -18,6 +18,17 @@ export const KITE_TESTNET = {
   },
 } as const;
 
+export type TestnetToken = { symbol: string; address: `0x${string}`; decimals: 18 };
+
+/**
+ * Stablecoins Rail 2 may pay with, in preference order. pieUSD is owner-minted; test USDT is what
+ * faucet.gokite.ai hands out (see its /api/getChainConfigs). Both use 18 decimals.
+ */
+export const RAIL2_TOKENS: readonly TestnetToken[] = [
+  { symbol: "pieUSD", address: KITE_TESTNET.asset.address, decimals: 18 },
+  { symbol: "USDT", address: "0x0fF5393387ad2f9f691FD6Fd28e07E3969e27e63", decimals: 18 },
+];
+
 export const PIEUSD_DECIMALS = KITE_TESTNET.asset.decimals;
 
 export function explorerTxUrl(txHash: string): string {

@@ -3,7 +3,7 @@
 
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, http, isAddress, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { centsToTestnetUnits, explorerTxUrl, formatTestnetAmount, KITE_TESTNET } from "../kite/config";
+import { centsToTestnetUnits, explorerTxUrl, formatTestnetAmount, KITE_TESTNET, RAIL2_TOKENS } from "../kite/config";
 import { RailError, type PaymentOrder, type PaymentRail, type PaymentReceipt } from "./types";
 
 export const kiteTestnet = defineChain({
@@ -52,23 +52,32 @@ export class DirectTestnetRail implements PaymentRail {
     }
 
     const amount = centsToTestnetUnits(order.priceCents);
-    const balance = await publicClient.readContract({
-      address: KITE_TESTNET.asset.address,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [account.address],
-    });
-    if (balance < amount) {
+    const balances = await Promise.all(
+      RAIL2_TOKENS.map((token) =>
+        publicClient
+          .readContract({ address: token.address, abi: erc20Abi, functionName: "balanceOf", args: [account.address] })
+          .then((balance) => ({ token, balance }))
+          .catch(() => ({ token, balance: 0n })),
+      ),
+    );
+    const funded = balances.find((b) => b.balance >= amount);
+    if (!funded) {
+      const held = balances.map((b) => `${formatTestnetAmount(b.balance)} ${b.token.symbol}`).join(", ");
       throw new RailError(
-        `Agent wallet ${account.address} has ${formatTestnetAmount(balance)} pieUSD, needs ${formatTestnetAmount(amount)}. Top up from the testnet faucet.`,
+        `Agent wallet ${account.address} holds ${held}; needs ${formatTestnetAmount(amount)} of one of them. Top up at ${KITE_TESTNET.faucetUrl}.`,
       );
+    }
+    const token = funded.token;
+    const gas = await publicClient.getBalance({ address: account.address });
+    if (gas === 0n) {
+      throw new RailError(`Agent wallet ${account.address} has no KITE for gas. Top up at ${KITE_TESTNET.faucetUrl}.`);
     }
 
     const wallet = createWalletClient({ account, chain: kiteTestnet, transport });
     let txHash: Hex;
     try {
       txHash = await wallet.writeContract({
-        address: KITE_TESTNET.asset.address,
+        address: token.address,
         abi: erc20Abi,
         functionName: "transfer",
         args: [payee, amount],
@@ -91,7 +100,7 @@ export class DirectTestnetRail implements PaymentRail {
       rail: this.id,
       amountCents: order.priceCents,
       testnetAmount: formatTestnetAmount(amount),
-      asset: KITE_TESTNET.asset.symbol,
+      asset: token.symbol,
       payee,
       network: KITE_TESTNET.caip2,
       txHash,
