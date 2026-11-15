@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ServReasoningAdapter } from "../lib/adapters/reasoning";
 
+function lastFetchBody(fetchMock: ReturnType<typeof vi.fn>): Record<string, unknown> {
+  const init = (fetchMock.mock.calls.at(-1)?.[1] ?? {}) as RequestInit;
+  return JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>;
+}
+
 describe("ServReasoningAdapter", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -26,7 +31,7 @@ describe("ServReasoningAdapter", () => {
       schema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false },
     });
 
-    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const body = lastFetchBody(fetchMock);
     expect(body.max_tokens).toBe(2048);
     expect(body.max_tokens).toBeLessThanOrEqual(16_000);
   });
@@ -47,6 +52,6 @@ describe("ServReasoningAdapter", () => {
       schemaName: "test",
       schema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false },
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).max_tokens).toBe(512);
+    expect(lastFetchBody(fetchMock).max_tokens).toBe(512);
   });
 });
