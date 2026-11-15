@@ -29,6 +29,8 @@ The coverage badge is the line rate from `npm run test:coverage` on 15 Nov 2026:
 
 People pay the sticker price because haggling is awkward and the money leaks out a little at a time. Melit negotiates with four mock sellers, shows the reasoning, and runs that check in server code before any payment. What it saved versus list price goes in a vault: 85% shown as yours, 15% as Melit's fee. That split is arithmetic. It is not a charge to a card.
 
+![Melit dashboard — shopping list, negotiation feed, Reppo track, and agent card on https://melit.vercel.app](docs/screenshots/melit-dashboard.png)
+
 ## What we built
 
 1. **A signed shopping list** of `{ name, maxPrice, quantity }`. That is what Melit can buy.
@@ -214,7 +216,7 @@ Everything runs on **KiteAI testnet** (chain ID 2368, RPC `https://rpc-testnet.g
 The order of checks for every purchase:
 
 1. **Spend Guard first.** The signed shopping list and the $300 cap both have to approve the exact amount, or nothing else runs (`lib/negotiation/run.ts`).
-2. **Rail 1: Kite Passport sandbox.** The server runs `kpass sandbox status`, and refuses to continue unless kpass confirms sandbox mode. It then runs `kpass session execute --method GET --url <mock seller checkout> --idempotency-key <order id>` as a child process with an explicit argument list (no shell). The mock seller's checkout is a real x402 endpoint built with `@x402/next`: it answers HTTP 402 with exact-scheme pieUSD requirements on `eip155:2368` and settles through the Pieverse facilitator. It only charges orders signed by Melit after Guard approval. The approved Passport session (3 pieUSD over 7 days) is a **second** limit layer.
+2. **Rail 1: Kite Passport sandbox.** The server runs `kpass sandbox status`, and refuses to continue unless kpass confirms sandbox mode. It then runs `kpass session execute --method GET --url <mock seller checkout> --idempotency-key <order id>` as a child process with an explicit argument list (no shell). The mock seller's checkout is a real x402 endpoint built with `@x402/next`: it answers HTTP 402 with exact-scheme pieUSD requirements on `eip155:2368` and settles through the Pieverse facilitator. It only charges orders signed by Melit after Guard approval. The approved Passport session (3 pieUSD over **30 days** on the public hackathon deploy) is a **second** limit layer.
 3. **Rail 2: direct testnet transfer.** If Rail 1 fails for any reason other than the two exceptions below (not logged in, not sandbox, `host_not_in_executable_catalog`, `sandbox_merchant_not_allowlisted`, unreachable seller, and so on), Melit pays the mock seller straight from `AGENT_PRIVATE_KEY`. It confirms the RPC reports chain 2368, then:
    - **Gasless pieUSD (default).** The agent signs an EIP-3009 `transferWithAuthorization` for pieUSD with viem (the x402 "exact" scheme, `@x402/evm`). The Pieverse x402 facilitator verifies it, submits it on KiteAI testnet and pays the KITE gas. The x402 client's own spend control refuses to sign anything above the weekly cap, which is a third limit layer.
    - **Plain ERC-20 transfer.** Used when the wallet doesn't hold enough pieUSD but has faucet test USDT and KITE for gas.
@@ -233,7 +235,7 @@ Each ledger entry stores the rail that paid, the tx hash and a KiteScan link, an
 
 **Kite Passport status (tested Nov 15, 2026):**
 - **Production backend** (`passport.prod.gokite.ai`): in sandbox mode, `kpass agent register` aborts with `sandbox mode mismatch: server reported X-Kite-Mode="live"`, and the faucet is "disabled on production".
-- **Staging backend** (`KPASS_BASE_URL=https://passport.staging.gokite.ai`): sandbox works end to end. Melit's agent is registered, its faucet funded the wallets with pieUSD on chain 2368, and a "Melit weekly budget" session (3 pieUSD, 7 days) was approved with a passkey.
+- **Staging backend** (`KPASS_BASE_URL=https://passport.staging.gokite.ai`): sandbox works end to end. Melit's agent is registered, its faucet funded the wallets with pieUSD on chain 2368, and a "Melit hackathon judge window" session (3 pieUSD, **30 days**) can be approved with a passkey (`npm run kite:setup` uses `--ttl 30d`).
 - **What still blocks Rail 1:** `kpass session execute` against the mock seller returns `payment_target_forbidden … reason="sandbox_merchant_not_allowlisted"`. Kite only lets sessions pay allowlisted merchants, and listing a seller requires account KYC. So today every purchase genuinely tries Rail 1, records Kite's refusal in the receipt's attempt trail, and settles through Rail 2.
 - Once the seller host is allowlisted, Rail 1 pays first with no code change.
 
