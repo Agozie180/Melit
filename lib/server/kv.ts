@@ -24,6 +24,14 @@ function getRedis(): Redis | null {
   return redis;
 }
 
+/** Upstash Redis deserializes JSON strings on GET; demo-state always expects a JSON string to parse. */
+export function redisValueToJsonString(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "object") return JSON.stringify(value);
+  return JSON.stringify(value);
+}
+
 function filePath(key: string): string {
   const safe = Buffer.from(key, "utf8").toString("base64url");
   return path.join(FILE_DIR, `${safe}.json`);
@@ -36,8 +44,8 @@ export function persistentStoreReady(): boolean {
 export async function kvGet(key: string): Promise<string | null> {
   const r = getRedis();
   if (r) {
-    const value = await r.get<string>(key);
-    return value ?? null;
+    const value = await r.get(key);
+    return redisValueToJsonString(value);
   }
   try {
     return await readFile(filePath(key), "utf8");

@@ -33,7 +33,7 @@ while (Date.now() < deadline) {
           score: last.verdict!.score,
           route: last.verdict!.route,
           inputMatch: last.input === input,
-          evalUrl: `https://eval.reppo.xyz/evals/${last.id}`,
+          evalUrl: `https://eval.reppo.xyz/evaluations/${last.id}`,
         },
         null,
         2,
