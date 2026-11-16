@@ -44,6 +44,10 @@ The method was to read the payment path, run `npm test`, call the live `/api/age
 
 ## Open
 
+### A5. Upstash KV broke production financial state (fix in progress)
+
+**Root cause.** `@upstash/redis` `GET` returns deserialized JSON objects; `demo-state` called `JSON.parse` on non-strings → `ledgerIntegrity: invalid` and `list: null` after every list save on Vercel. **Fix:** `redisValueToJsonString` in `lib/server/kv.ts`. **Tests:** `tests/kv-upstash.test.ts`, live `npm run probe:live-reppo` against preview/production.
+
 ### B0. Passport on Vercel (Rail 1) — merchant allowlist (ops)
 
 **Path added 15 Nov 2026 evening.** `scripts/download-kpass.mjs` installs `vendor/kpass-linux-amd64` at build. `KPASS_RUNTIME_BUNDLE_B64` (from `npm run kite:export-runtime`) materializes `~/.kite-passport` into `/tmp` via `lib/kite/kpass-runtime.ts` (npm `tar` package on Vercel — no system `tar` binary). `MELIT_KPASS=1` or the bundle env enables Rail 1. **Production (15 Nov 2026 night):** Vercel has the bundle, session (`agent_session_01a1e10c-338d-7698-b16c-a2218d24880b`, 30-day TTL), and `SELLER_BASE_URL`; `GET https://melit.vercel.app/api/agent` returns `passport.runtimeReady: true`. **Still blocks Rail 1 settlement:** Kite merchant allowlist (`sandbox_merchant_not_allowlisted`) until `https://melit.vercel.app` is listed. The dashboard card may still say testnet wallet if serverless `kpass agent status` does not confirm in that request. **Test:** `tests/kpass-runtime.test.ts`, `npm run download:kpass`, `npm run smoke:browser` (prod build).

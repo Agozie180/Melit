@@ -104,26 +104,48 @@ if (sellerHost) {
   kpass(["merchant", "register", "--url", sellerHost.replace(/\/+$/, "")], { allowFail: true });
 }
 
-const session = kpass(
-  [
-    "session",
-    "create",
-    "--separate",
-    "--task-summary",
-    "Melit hackathon judge window",
-    "--max-amount-per-tx",
-    String(maxPerTx),
-    "--max-total-amount",
-    String(maxTotal),
-    "--assets",
-    "pieUSD",
-    "--ttl",
-    "30d",
-    "--no-browser",
-    "--no-wait",
-  ],
-  { allowFail: true },
-);
+const sessionArgs = [
+  "session",
+  "create",
+  "--separate",
+  "--task-summary",
+  "Melit hackathon judge window",
+  "--max-amount-per-tx",
+  String(maxPerTx),
+  "--max-total-amount",
+  String(maxTotal),
+  "--ttl",
+  "30d",
+  "--no-browser",
+  "--no-wait",
+];
+if (sellerHost) {
+  const origin = sellerHost.startsWith("http") ? sellerHost.replace(/\/+$/, "") : `https://${sellerHost.replace(/\/+$/, "")}`;
+  let host;
+  try {
+    host = new URL(origin).host;
+  } catch {
+    host = null;
+  }
+  if (host) {
+    const delegation = JSON.stringify({
+      task: { summary: "Melit mock marketplace checkouts on " + host },
+      payment_policy: { currency: "USD", max_amount_per_tx: String(maxPerTx), max_total_amount: String(maxTotal) },
+      execution_constraints: {
+        x402: {
+          scope_mode: "scoped",
+          allowed_endpoints: [{ host, method: "GET", path_prefix: "/api/sellers/" }],
+        },
+      },
+    });
+    sessionArgs.push("--delegation", delegation);
+    console.log("\nUsing scoped delegation for seller host:", host);
+  }
+} else {
+  sessionArgs.push("--assets", "pieUSD");
+  console.log("\nNo SELLER_BASE_URL: session is not scoped to a checkout host (Passport execute may hit catalog/allowlist errors).");
+}
+const session = kpass(sessionArgs, { allowFail: true });
 
 const urls = findAll(session, (v) => typeof v === "string" && /^https:\/\//.test(v));
 const ids = findAll(session, (v) => typeof v === "string" && /^(session_|sess_|req_)/.test(v));
@@ -132,7 +154,7 @@ if (urls.length) console.log(`  1. Approve the session with your passkey: ${urls
 else console.log("  1. Approve the session with your passkey using the URL printed above.");
 console.log("  2. Wait for approval: kpass session status --request-id <id> --wait --output json");
 console.log(`  3. In .env.local set MELIT_KPASS=1 and KPASS_SESSION_ID=<session id>${ids.length ? ` (candidates: ${ids.join(", ")})` : ""}`);
-console.log("  4. Set SELLER_BASE_URL to a PUBLIC URL serving this app (your Vercel deploy), since Passport's backend fetches the seller checkout itself,");
-console.log("     and the same MELIT_ORDER_SECRET locally and on that deploy.");
+console.log("  4. Set SELLER_BASE_URL before session create (re-run kite:setup with --seller-host https://melit.vercel.app) so the delegation scopes checkout URLs.");
+console.log("     Passport's backend fetches the seller checkout; use the same MELIT_ORDER_SECRET on deploy and local.");
 if (baseUrl) console.log(`  5. Set KPASS_BASE_URL=${baseUrl} so Melit's kpass calls use the same backend.`);
 console.log("  5. Set AGENT_PRIVATE_KEY (testnet only) and MOCK_SELLER_PAYTO for the Rail 2 fallback, then `npm run dev`.");

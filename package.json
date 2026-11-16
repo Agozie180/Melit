@@ -18,6 +18,7 @@
     "verify:serv-payload": "npx --yes tsx scripts/probe-serv-payload.mts",
     "smoke:browser": "node scripts/run-browser-smoke.mjs",
     "verify:reppo": "npx --yes tsx scripts/verify-reppo.mts",
+    "probe:live-reppo": "node scripts/probe-live-reppo.mjs",
     "playwright:install": "playwright install chromium"
   },
   "dependencies": {
